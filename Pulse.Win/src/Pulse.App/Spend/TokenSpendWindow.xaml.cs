@@ -40,7 +40,9 @@ public partial class TokenSpendWindow : Window
     private void OnProviderTabChanged(object sender, RoutedEventArgs e)
     {
         if (ClaudeTab is null) return; // XAML still initializing
-        _kind = CodexTab.IsChecked == true ? TranscriptKind.Codex : TranscriptKind.ClaudeCode;
+        _kind = CodexTab.IsChecked == true ? TranscriptKind.Codex
+            : OpenCodeTab.IsChecked == true ? TranscriptKind.OpenCode
+            : TranscriptKind.ClaudeCode;
         Refresh();
     }
 
@@ -48,9 +50,23 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        var result = _scanner.Scan(_kind, _prices, refresh: true);
-        _ledger = result.Ledger;
-        _files = result.Files;
+        if (_kind == TranscriptKind.OpenCode)
+        {
+            // OpenCode (and Kilo) keeps one SQLite store, not per-session files.
+            var root = TranscriptLocator.OpenCodeRoot();
+            var store = root is null ? null : Directory.EnumerateFiles(root, "db.sqlite",
+                SearchOption.AllDirectories).FirstOrDefault() is { } found ? found : null;
+            _ledger = store is null
+                ? UsageLedger.EmptyLedger
+                : OpenCodeStoreReader.LedgerAt(store, _prices);
+            _files = new Dictionary<string, ScannedTranscript>();
+        }
+        else
+        {
+            var result = _scanner.Scan(_kind, _prices, refresh: true);
+            _ledger = result.Ledger;
+            _files = result.Files;
+        }
 
         RenderSummary();
         RenderChart();

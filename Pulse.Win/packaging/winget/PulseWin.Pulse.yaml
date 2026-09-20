@@ -1,0 +1,33 @@
+# Winget manifest for Pulse.Win — the distribution entry point (winget is a
+# catalog, not an installer format: this manifest points at the MSIX the
+# windows-release pipeline attaches to each GitHub release).
+# Submission: PR to microsoft/winget-pkgs under manifests/p/PulseWin/Pulse/.
+YamlCreate: manual
+PackageIdentifier: PulseWin.Pulse
+PackageVersion: "0.2.0"
+PackageLocale: en-US
+Publisher: PulseWin
+PublisherUrl: https://github.com/quji762/MyTrace
+PackageName: Pulse
+PackageUrl: https://github.com/quji762/MyTrace
+License: Apache-2.0
+LicenseUrl: https://github.com/qunqin24/Pulse/blob/main/LICENSE
+ShortDescription: Track the pulse of your AI usage.
+Description: |-
+  Pulse shows your AI coding subscription limits at a glance: a rail of usage
+  rings for Claude Code, Codex, Cursor, Copilot and more, with token spend
+  history read from the CLIs' own local transcripts. Windows-native rewrite
+  of qunqin24/Pulse (macOS).
+Tags:
+  - ai
+  - usage
+  - quota
+  - developer-tools
+Installers:
+  - Architecture: x64
+    InstallerType: msix
+    InstallerUrl: https://github.com/quji762/MyTrace/releases/download/windows-v0.2.0/PulseWin.msix
+    InstallerSha256: "<stamped by the release pipeline>"
+    PackageFamilyName: PulseWin.PulseWin_XXXXXXXXXXXX
+ManifestType: singleton
+ManifestVersion: 1.6.0

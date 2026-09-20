@@ -7,7 +7,7 @@ namespace Pulse.Core.Ledger;
 /// %USERPROFILE%\.codex\sessions (Codex) — the same roots upstream scans under
 /// the Unix home. Read-only; the CLIs' own files are never written.
 /// </summary>
-public static class TranscriptLocator
+public static partial class TranscriptLocator
 {
     public static string? ClaudeRoot(string? userProfile = null) =>
         Root(userProfile, ".claude", "projects");
@@ -194,10 +194,4 @@ public sealed class TranscriptScanner
         }
         catch (Exception) { }
     }
-}
-
-public enum TranscriptKind
-{
-    ClaudeCode,
-    Codex,
 }
