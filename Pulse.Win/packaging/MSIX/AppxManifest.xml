@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+
+  <!-- Version is stamped by the release pipeline (windows-v* tag). -->
+  <Identity
+    Name="PulseWin.PulseWin"
+    Publisher="CN=PulseWin"
+    Version="0.2.0.0" />
+
+  <Properties>
+    <DisplayName>Pulse</DisplayName>
+    <PublisherDisplayName>PulseWin</PublisherDisplayName>
+    <Logo>assets\logo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="zh-cn" />
+  </Resources>
+
+  <Applications>
+    <Application Id="PulseWin"
+                 Executable="Pulse.App.exe"
+                 EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Pulse"
+        Description="Track the pulse of your AI usage."
+        BackgroundColor="transparent"
+        Square150x150Logo="assets\logo.png"
+        Square44x44Logo="assets\logo.png" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Internet client only: the app talks directly to providers; there is no
+         Pulse backend and nothing else leaves the machine. -->
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>
