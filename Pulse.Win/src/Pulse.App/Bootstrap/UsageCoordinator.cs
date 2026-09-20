@@ -5,43 +5,37 @@ using Pulse.Core.Refresh;
 namespace Pulse.App.Bootstrap;
 
 /// <summary>
-/// Composition root for the usage pipeline: wires accounts to providers, drives the
-/// refresh engine on a low-frequency timer, and forwards readings to the UI thread.
-/// One scheduler, one timer — never a timer per provider (resource budget constraint).
+/// Composition root for the usage pipeline: wires every registered provider to a
+/// monitored account, drives the refresh engine on a low-frequency timer, and
+/// forwards readings to the UI thread. One scheduler, one timer — never a timer
+/// per provider (resource budget constraint).
 /// </summary>
 public sealed class UsageCoordinator : IAsyncDisposable
 {
     public sealed record Reading(MonitoredAccount Account, ProviderReadResult Result);
 
-    private readonly MonitoredAccount?[] _accounts;
+    private readonly MonitoredAccount[] _accounts;
     private readonly RefreshEngine _engine;
     private readonly System.Threading.Timer? _timer;
 
     public UsageCoordinator(
-        MonitoredAccount?[] accounts,
-        Func<string?, IUsageProvider?[]> providerSetFactory,
+        IReadOnlyDictionary<ProviderId, IUsageProvider> adapters,
+        IEnumerable<MonitoredAccount> accounts,
         Action<Reading> onReading,
-        string? sharedKey = null)
+        ICredentialStore? store = null)
     {
-        _accounts = accounts;
-        var adapters = providerSetFactory(sharedKey ?? string.Empty);
-        var providerByIndex = new System.Collections.Generic.Dictionary<ProviderId, IUsageProvider>();
-        for (var i = 0; i < accounts.Length; i++)
-        {
-            if (accounts[i] is { } account && i < adapters.Length && adapters[i] is { } adapter)
-                providerByIndex[account.Provider] = adapter;
-        }
+        _accounts = accounts.Where(a => adapters.ContainsKey(a.Provider)).ToArray();
 
         _engine = new RefreshEngine(
-            account => providerByIndex.GetValueOrDefault(account.Provider),
+            account => adapters.GetValueOrDefault(account.Provider),
             _ => new AdaptiveRefresh.Signals { PanelVisible = true },
-            new ConsoleLogger());
+            new DebugLogger());
 
         _engine.ReadingChanged += (account, result) => onReading(new Reading(account, result));
 
         // One low-frequency scheduler tick; the engine decides who is actually due.
         _timer = new System.Threading.Timer(
-            _ => _ = _engine.RunDueAsync(_accounts.Where(a => a is not null).Select(a => a!).ToList(), CancellationToken.None),
+            _ => _ = _engine.RunDueAsync(_accounts, CancellationToken.None),
             null,
             dueTime: TimeSpan.Zero,
             period: TimeSpan.FromSeconds(30));
@@ -50,12 +44,12 @@ public sealed class UsageCoordinator : IAsyncDisposable
     public void Start()
     {
         foreach (var account in _accounts)
-            if (account is { } a) _engine.Schedule(a);
+            _engine.Schedule(account);
     }
 
     public ValueTask DisposeAsync() => _engine.DisposeAsync();
 
-    private sealed class ConsoleLogger : ILogger
+    private sealed class DebugLogger : ILogger
     {
         public void Log(string message) => System.Diagnostics.Debug.WriteLine($"[pulse] {message}");
     }

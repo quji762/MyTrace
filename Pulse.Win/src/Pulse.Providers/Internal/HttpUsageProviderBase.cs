@@ -18,6 +18,9 @@ public abstract class HttpUsageProviderBase : IUsageProvider
 
     protected abstract string Endpoint { get; }
 
+    /// <summary>Subclasses with endpoint fallbacks may pin which one the next request uses.</summary>
+    protected virtual string EndpointOrDefault => Endpoint;
+
     protected virtual AuthenticationHeaderValue? AuthHeader(string credential) =>
         new AuthenticationHeaderValue("Bearer", credential);
 
@@ -27,7 +30,18 @@ public abstract class HttpUsageProviderBase : IUsageProvider
     /// <summary>Parse a successful (2xx) response body into usage. Throw SchemaException on unexpected shape.</summary>
     protected abstract ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now);
 
-    public async Task<ProviderReadResult> ReadAsync(
+    /// <summary>Build the outgoing request; override for POST/custom headers.</summary>
+    protected virtual HttpRequestMessage BuildRequest(string credential)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, EndpointOrDefault);
+        request.Headers.Authorization = AuthHeader(credential);
+        foreach (var (name, value) in ExtraHeaders())
+            request.Headers.TryAddWithoutValidation(name, value);
+        request.Headers.Accept.ParseAdd("application/json");
+        return request;
+    }
+
+    public virtual async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account,
         ProviderReadContext context,
         CancellationToken cancellationToken)
@@ -37,11 +51,7 @@ public abstract class HttpUsageProviderBase : IUsageProvider
             return ProviderReadResult.Failed(ProviderReadHealth.CredentialExpired, "credential missing");
 
         using var httpClient = HttpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, Endpoint);
-        request.Headers.Authorization = AuthHeader(credential!);
-        foreach (var (name, value) in ExtraHeaders())
-            request.Headers.TryAddWithoutValidation(name, value);
-        request.Headers.Accept.ParseAdd("application/json");
+        using var request = BuildRequest(credential!);
 
         HttpResponseMessage response;
         try
@@ -97,6 +107,18 @@ public abstract class HttpUsageProviderBase : IUsageProvider
         catch (SchemaException ex)
         {
             return ProviderReadResult.Failed(ProviderReadHealth.SchemaChanged, ex.Message);
+        }
+        catch (Pulse.Providers.Zai.ZaiProvider.EnvelopeException ex)
+        {
+            // The envelope classified itself (bad key vs rate limit vs server error);
+            // trust that verdict rather than flattening it into a schema change.
+            return ProviderReadResult.Failed(ex.Kind switch
+            {
+                UnavailabilityKind.Unauthorized => ProviderReadHealth.Unauthorized,
+                UnavailabilityKind.RateLimited => ProviderReadHealth.RateLimited,
+                UnavailabilityKind.NotConfigured => ProviderReadHealth.Healthy,
+                _ => ProviderReadHealth.ProviderUnavailable,
+            }, ex.Message);
         }
     }
 

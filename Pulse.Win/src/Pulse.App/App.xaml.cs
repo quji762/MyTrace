@@ -3,9 +3,7 @@ using Pulse.App.Bootstrap;
 using Pulse.App.Tray;
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
-using Pulse.Providers.DeepSeek;
-using Pulse.Providers.Kimi;
-using Pulse.Providers.OpenCodeGo;
+using Pulse.Providers;
 
 namespace Pulse.App;
 
@@ -27,21 +25,17 @@ public partial class App : System.Windows.Application
         _rail = new RailWindow();
         _rail.Show();
 
-        // MVP wiring: the three key-based providers with user-pasted keys.
-        _coordinator = new UsageCoordinator(
-            new MonitoredAccount?[]
-            {
-                new MonitoredAccount { Provider = ProviderId.DeepSeek, AccountId = "deepSeek", Label = null },
-                new MonitoredAccount { Provider = ProviderId.KimiCode, AccountId = "kimiCode", Label = null },
-                new MonitoredAccount { Provider = ProviderId.OpenCodeGo, AccountId = "openCodeGo", Label = null },
-            },
-            key => new IUsageProvider?[]
-            {
-                new DeepSeekProvider(_ => key),
-                new KimiCodeProvider(_ => key),
-                new OpenCodeGoProvider(_ => key),
-            },
-            reading => _rail.UpdateProvider(reading.Account, reading.Result));
+        // Every registered provider gets a monitored account; the store (currently
+        // in-memory until the vault milestone) holds pasted credentials. Providers
+        // without a stored credential report CredentialMissing — a visible, honest
+        // state, not a crash.
+        var store = new InMemoryCredentialStore();
+        var adapters = ProviderRegistry.CreateAll(store);
+        var accounts = Enum.GetValues<ProviderId>()
+            .Select(id => new MonitoredAccount { Provider = id, AccountId = id.ToString() })
+            .ToArray();
+
+        _coordinator = new UsageCoordinator(adapters, accounts, reading => _rail.UpdateProvider(reading.Account, reading.Result));
 
         _tray = new NotifyIconTray();
         _tray.ShowRailRequested += () => _rail?.ShowAndRestore();
