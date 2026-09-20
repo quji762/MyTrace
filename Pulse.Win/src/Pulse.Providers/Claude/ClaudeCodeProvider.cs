@@ -49,6 +49,59 @@ public sealed class ClaudeCodeProvider : HttpUsageProviderBase
         return _cliTokenLocator?.Invoke() ?? LocateCliToken();
     }
 
+    public override async Task<ProviderReadResult> ReadAsync(
+        MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
+    {
+        var result = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
+
+        // A network stumble shouldn't hide a perfectly good captured reading,
+        // but a live reading outranks a captured one: the capture keeps its turn
+        // only when there is no live reading to be had. This is a push route —
+        // it only moves while a session runs — so the reading's age is part of
+        // what it means.
+        var needsFallback = result.Health is ProviderReadHealth.CredentialExpired
+            or ProviderReadHealth.Unauthorized
+            or ProviderReadHealth.ProviderUnavailable;
+        if (!needsFallback) return result;
+
+        if (Pulse.Core.ClaudeHook.StatusLineCapture.Read() is not { } captured)
+            return result;
+
+        var windows = new List<UsageWindow>();
+        if (captured.FiveHourPercent is { } five)
+            windows.Add(new UsageWindow(
+                Id: "claudeCode.statusline.five_hour",
+                Kind: UsageWindowKind.FiveHour,
+                Scope: null,
+                UsedFraction: Math.Clamp(five, 0, 100) / 100,
+                WindowSeconds: 5 * 3600,
+                ResetsAt: captured.FiveHourReset));
+        if (captured.SevenDayPercent is { } seven)
+            windows.Add(new UsageWindow(
+                Id: "claudeCode.statusline.seven_day",
+                Kind: UsageWindowKind.Weekly,
+                Scope: null,
+                UsedFraction: Math.Clamp(seven, 0, 100) / 100,
+                WindowSeconds: 7 * 86400,
+                ResetsAt: captured.SevenDayReset));
+
+        if (windows.Count == 0) return result;
+
+        // Between sessions the figures are whatever they were at last use:
+        // older than ten minutes reads as stale, not live (upstream freshFor).
+        var fresh = context.Now - captured.CapturedAt <= TimeSpan.FromMinutes(10);
+        return ProviderReadResult.Ok(new ProviderUsage(
+            Provider: ProviderId.ClaudeCode,
+            AccountId: account.AccountId,
+            Windows: windows,
+            ObservedAt: captured.CapturedAt,
+            State: fresh ? UsageState.Live : UsageState.Stale,
+            Plan: null,
+            CreditBalance: null,
+            CreditRemaining: null,
+            Origin: UsageRoute.StatusLine));
+    }
+
     /// <summary>
     /// The credentials blob Claude Code stores on Windows: `~/.claude/.credentials.json`,
     /// `claudeAiOauth.accessToken` with `expiresAt` in milliseconds. An expired

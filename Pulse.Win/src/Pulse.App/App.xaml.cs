@@ -3,6 +3,7 @@ using Pulse.App.Bootstrap;
 using Pulse.App.Tray;
 using Pulse.App.Settings;
 using Pulse.App.Spend;
+using Pulse.Core.ClaudeHook;
 using Pulse.Core.Accounts;
 using Pulse.Core.Notifications;
 using Pulse.Core.Platform;
@@ -29,6 +30,21 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Status-line capture mode: Claude Code pipes a JSON blob to this
+        // executable after every response. Bank the usage part, print the line,
+        // and leave without ever building the UI. Anything unexpected is
+        // swallowed on purpose — a status line that errors out or hangs is far
+        // worse than one that says nothing.
+        if (e.Args.Contains(Pulse.Core.ClaudeHook.StatusLinePaths.ModeArgument))
+        {
+            var payload = Console.In.ReadToEnd();
+            var line = StatusLineCapture.RunAsStatusLine(payload);
+            if (!string.IsNullOrEmpty(line))
+                Console.Out.Write(line);
+            Shutdown();
+            return;
+        }
 
         _instanceLock = WindowsIntegration.AcquireSingleInstanceLock(out var isFirstInstance);
         if (!isFirstInstance)
