@@ -27,18 +27,28 @@
 | 阈值通知 | crossing 触发一次（armed/disarmed 迟滞）；reset 变更重新武装；Provider exhausted 标志无视百分比；气泡通知 + Rail 双通道 |
 | Windows 集成 | 托盘图标（Explorer 重启自恢复）；命名互斥体单实例；HKCU Run 键开机启动（无需管理员）；设置窗口 |
 
+### ✅ 已对齐（第二批）
+
+| 能力 | 状态 |
+|---|---|
+| 多账号管理 | Claude/Codex/Grok/GrokBot 四个 `supportsMultipleAccounts` Provider 均有设置页"Add account"，驱动各自主 OAuth 流程（OpenAI 设备码/xAI 设备码/Claude loopback）；slot 生成后永不复用，删除重加不继承身份；与 CLI 自身登录完全隔离 |
+| Grok 设备码登录 | xAI RFC 8628 标准形（等待与拒绝都是 400，由 body error 区分）；`billing:read` 不请求（端点实测拒绝）；使用 xAI 自带的 verification_uri_complete |
+| Grok Bot Cursor 网页登录 | loginDeepControl + poll（404=未完成，403 才终止）；challenge=SHA-256(ENCODED verifier)；~60 天 token 无刷新端点 |
+| Token 刷新 | 旧 refresh token 前向保留；绝不触碰 CLI 自身存储 |
+| 主题 | Light/Dark/System 三态，System 跟随系统 AppsUseLightTheme；调色板 token 热切换 |
+| Hover 详情卡片 | 非激活 Popup 列出全部窗口（环只显示第一个）+ scope/reset/plan/余额 + 燃烧率 ETA |
+| MSIX 发布链 | windows-release.yml：测试 → x64 发布 → MakeAppx → 签名（secrets 可选）→ canary 扫描 → Release；独立于上游 macOS 流水线 |
+
 ### 🚧 与原版仍有差距
 
 | 能力 | 差距 | 备注 |
 |---|---|---|
-| 多账号 UI | Claude/Codex/Grok/GrokBot 支持多账号（上游 `supportsMultipleAccounts`）；引擎已按账户隔离，UI 尚未暴露"添加账号" | OAuth 流程已就绪 |
 | Token Spend（54 数据源） | 本地 CLI transcript 历史统计、每日图表、按模型分类 | 独立子项目（上游也定位为 1.x） |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
 | Codex app-server fallback | `codex app-server` JSON-RPC 子进程路由 | Windows 版本待验证 |
-| Hover 详情卡片 | 上游 hover 显示全部窗口+预测；当前 Rail 直接显示说明文字 | 卡片是 UI 增强 |
-| 主题 | 深色 token 已有；Light/System 跟随未实现 | |
-| MSIX/签名/winget | 打包与自动更新链 | W8 计划 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
+| winget manifest | 待首个发布 tag 后提交 | 打包链已就绪 |
+| 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
 
 ## 技术栈
 
@@ -50,7 +60,7 @@
 | 密钥存储 | DPAPI CurrentUser vault + Windows Credential Manager |
 | 认证 | GitHub Device Flow / OpenAI Device Code / Claude loopback OAuth |
 | 测试 | xUnit + Provider 契约测试（fixtures 来自上游 Apache-2.0 仓库） |
-| 打包 | MSIX + App Installer（规划中） |
+| 打包 | MSIX（windows-release.yml 流水线，windows-v* 标签触发） |
 
 ## 解决方案结构
 
