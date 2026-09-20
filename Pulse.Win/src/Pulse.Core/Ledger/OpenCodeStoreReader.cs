@@ -21,6 +21,7 @@ public enum TranscriptKind
     CopilotVsCode,
     Kiro,
     Qwen,
+    Gemini,
 }
 
 public static partial class TranscriptLocator

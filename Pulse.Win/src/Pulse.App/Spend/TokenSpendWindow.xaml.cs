@@ -51,6 +51,7 @@ public partial class TokenSpendWindow : Window
             : CopilotVsCodeTab.IsChecked == true ? TranscriptKind.CopilotVsCode
             : KiroTab.IsChecked == true ? TranscriptKind.Kiro
             : QwenTab.IsChecked == true ? TranscriptKind.Qwen
+            : GeminiTab.IsChecked == true ? TranscriptKind.Gemini
             : TranscriptKind.ClaudeCode;
         Refresh();
     }
@@ -59,7 +60,7 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen)
+        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini)
         {
             RenderRecordBased(_kind);
             return;
@@ -103,6 +104,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.CopilotVsCode => CopilotVsCodeReader.Records(),
             TranscriptKind.Kiro => KiroReader.Records(),
             TranscriptKind.Qwen => QwenSessionReader.Records(),
+            TranscriptKind.Gemini => GeminiSessionReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),
         };
         var built = AgentUsageLedger.Build(records, _prices);
