@@ -17,6 +17,8 @@ public enum TranscriptKind
     Amp,
     Goose,
     CopilotOtel,
+    CopilotDesktop,
+    CopilotVsCode,
 }
 
 public static partial class TranscriptLocator

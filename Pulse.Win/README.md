@@ -46,6 +46,8 @@
 | Amp spend 源 | assistant 消息与 usageLedger.events 对账（toMessageId 优先、模型+token 数兜底），匹配的消息不重复发出——两侧都发会把每次调用翻倍；无事件戳的消息标 isAggregate 放到线程时间；完全无时间不发出并标 incomplete |
 | Goose spend 源 | sessions.db（accumulated 列优先、累计语义→每会话一条 isAggregate 记录）；total−input−output 的差值**保持 unclassified，不推定 reasoning**（schema 未声明）；created_at 读不出跳过（不用 1970 分桶）；GOOSE_PATH_ROOT 优先 |
 | Copilot OTEL spend 源 | ~/.copilot/otel 的 OpenTelemetry JSONL：四车道优先级（chat span > inference log > agent-turn > agent-summary），跨车道按 trace/response id 抑制；token 拆分为不相交四类（cache read 从 input 扣一次、reasoning 仅在 output 缺席时补位）；裸 total 记 unclassified；W3C 全零哨兵 id 视为缺席；无时间戳的记录不落桶 |
+| Copilot Desktop spend 源 | data.db 行是 LIFETIME 权威、sidecar events.jsonl 是运行中总量：shutdown 快照按模型差分、按行预算封顶，解释不了的余量在 created_at 一次性发出；无 session.start 时首快照是未知基线；cache_write 只在 sidecar；reasoning 不并入 output（归属未声明）→标 isPartial；本车道全部 isAggregate |
+| Copilot VS Code spend 源 | chatSessions JSONL 是 append/patch 日志（kind 0/1/2），先重建请求数组再读取；仅 Copilot 自家请求计数（resolvedModel 或 copilot/ 前缀）；thinking tokens 折入 output；无时间戳跳过（不落 epoch）；同时刻两请求带 #n 后缀都计数 |
 | Token Spend 历史面板 | 每日 tokens 柱状图（零高度缺口日 + 无价份额帽）；会话列表（标题/项目/tokens/最近活动）；摘要行（全期与 7 天 tokens/cost、最忙日、top model 份额、无价模型）；托盘菜单直入 |
 
 ### 🚧 与原版仍有差距
@@ -54,7 +56,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 46 类数据源 | 首批 8 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 44 类数据源 | 首批 10 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
