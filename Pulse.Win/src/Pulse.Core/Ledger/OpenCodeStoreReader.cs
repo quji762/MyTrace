@@ -28,6 +28,7 @@ public enum TranscriptKind
     Junie,
     Codebuff,
     Mux,
+    Gjc,
 }
 
 public static partial class TranscriptLocator
