@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Pulse.Core\Pulse.Core.csproj" />
     <ProjectReference Include="..\Pulse.Providers\Pulse.Providers.csproj" />
     <ProjectReference Include="..\Pulse.Storage\Pulse.Storage.csproj" />
+    <ProjectReference Include="..\Pulse.Auth\Pulse.Auth.csproj" />
     <ProjectReference Include="..\Pulse.Diagnostics\Pulse.Diagnostics.csproj" />
   </ItemGroup>
 

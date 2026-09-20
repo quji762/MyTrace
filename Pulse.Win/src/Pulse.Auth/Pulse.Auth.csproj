@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pulse.Core\Pulse.Core.csproj" />
+    <ProjectReference Include="..\Pulse.Storage\Pulse.Storage.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
