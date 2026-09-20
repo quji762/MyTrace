@@ -12,6 +12,7 @@ public enum TranscriptKind
     ClaudeCode,
     Codex,
     OpenCode,
+    CherryStudio,
 }
 
 public static partial class TranscriptLocator

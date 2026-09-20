@@ -42,6 +42,7 @@ public partial class TokenSpendWindow : Window
         if (ClaudeTab is null) return; // XAML still initializing
         _kind = CodexTab.IsChecked == true ? TranscriptKind.Codex
             : OpenCodeTab.IsChecked == true ? TranscriptKind.OpenCode
+            : CherryTab.IsChecked == true ? TranscriptKind.CherryStudio
             : TranscriptKind.ClaudeCode;
         Refresh();
     }
@@ -50,6 +51,26 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
+        if (_kind == TranscriptKind.CherryStudio)
+        {
+            // Cherry Studio: Claude Code-shaped JSONL trees, stream-deduped.
+            var records = CherryStudioReader.Records();
+            var built = AgentUsageLedger.Build(records, _prices);
+            _ledger = built.Ledger;
+            SessionList.ItemsSource = built.Sessions
+                .Select(s => new SessionRow
+                {
+                    Name = s.Title ?? s.Name,
+                    Project = s.Project ?? "",
+                    TokensText = s.Tokens.ToString("N0"),
+                    EndText = s.End.ToLocalTime().ToString("MMM d HH:mm"),
+                })
+                .ToList();
+            RenderSummary();
+            RenderChart();
+            return;
+        }
+
         if (_kind == TranscriptKind.OpenCode)
         {
             // OpenCode (and Kilo) keeps one SQLite store, not per-session files.

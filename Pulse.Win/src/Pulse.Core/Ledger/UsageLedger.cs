@@ -173,6 +173,22 @@ public sealed record UsageLedger
     /// <summary>Ascending by start time. Only slots with work in them.</summary>
     public IReadOnlyList<Slot> Slots { get; init; } = Array.Empty<Slot>();
 
+    /// <summary>One per transcript/store session, priced the same way the days
+    /// are; one conversation with the agent.</summary>
+    public sealed record SessionRow
+    {
+        public required string Name { get; init; }
+        public string? Title { get; init; }
+        public string? Project { get; init; }
+        public DateTimeOffset Start { get; init; }
+        public DateTimeOffset End { get; init; }
+        public int Tokens { get; init; }
+        public double Cost { get; init; }
+    }
+
+    /// <summary>Sorted by end, most recent first.</summary>
+    public IReadOnlyList<SessionRow> Sessions { get; init; } = Array.Empty<SessionRow>();
+
     public static UsageLedger EmptyLedger { get; } = new();
 
     /// <summary>What has gone through since a moment — the figure a rate-limit
