@@ -35,6 +35,7 @@ public sealed class CodexProvider : HttpUsageProviderBase
     protected override string Endpoint => EndpointUrl;
 
     private (string Token, string AccountID)? Borrowed;
+    private CodexAppServerClient? _appServer;
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
@@ -43,6 +44,60 @@ public sealed class CodexProvider : HttpUsageProviderBase
 
         Borrowed = _cliCredentialsLocator?.Invoke() ?? LocateCliCredentials();
         return Borrowed?.Token;
+    }
+
+    public override async Task<ProviderReadResult> ReadAsync(
+        MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
+    {
+        var result = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
+
+        // No usable token, or the stored one was refused: the app server can
+        // still answer — it is signed in on its own terms and renews its own
+        // credentials. Pinned to the endpoint, a dead token is reported rather
+        // than quietly answered; automatic falls through to the fallback.
+        var needsFallback = result.Health is ProviderReadHealth.CredentialExpired or ProviderReadHealth.Unauthorized;
+        if (!needsFallback) return result;
+
+        return await FetchViaAppServerAsync(account, context).ConfigureAwait(false);
+    }
+
+    /// <summary>The `codex app-server` fallback: the CLI's own documented protocol.</summary>
+    private async Task<ProviderReadResult> FetchViaAppServerAsync(MonitoredAccount account, ProviderReadContext context)
+    {
+        try
+        {
+            _appServer ??= new CodexAppServerClient();
+            var rateLimits = await _appServer.RateLimitsAsync(CancellationToken.None).ConfigureAwait(false);
+            var usage = CodexMapping.ParseAppServerResponse(rateLimits, account.AccountId, context.Now);
+            return usage.Windows.Count > 0
+                ? ProviderReadResult.Ok(usage with { Origin = UsageRoute.AppServer })
+                : ProviderReadResult.Failed(ProviderReadHealth.SchemaChanged, "no limits reported");
+        }
+        catch (CodexAppServerClient.AppServerException ex)
+        {
+            return ex.Kind switch
+            {
+                // Neither route is open: no usable token, and no CLI to ask.
+                CodexAppServerClient.FailureKind.ExecutableNotFound =>
+                    ProviderReadResult.Failed(ProviderReadHealth.CredentialExpired, "sign in required"),
+                CodexAppServerClient.FailureKind.TimedOut =>
+                    ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "timeout"),
+                CodexAppServerClient.FailureKind.Server when IsAuth(ex.Message) =>
+                    ProviderReadResult.Failed(ProviderReadHealth.Unauthorized, "sign in required"),
+                _ => ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, ex.Message),
+            };
+        }
+        catch (Exception)
+        {
+            return ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "server error");
+        }
+    }
+
+    private static bool IsAuth(string? message)
+    {
+        if (message is null) return false;
+        string[] words = ["auth", "login", "sign in", "unauthor", "credential"];
+        return words.Any(message.ToLowerInvariant().Contains);
     }
 
     protected override HttpRequestMessage BuildRequest(string credential)
@@ -199,6 +254,115 @@ public static class CodexMapping
         604800 => UsageWindowKind.Weekly,
         _ => UsageWindowKind.Other,
     };
+
+    /// <summary>
+    /// The shape `account/rateLimits/read` returns, which names its fields
+    /// differently from the HTTP endpoint: groups keyed by limit id, each with
+    /// primary/secondary windows carrying usedPercent/windowDurationMins/resetsAt.
+    /// `ordinaryUsageAllowed` is the server's own last word on whether ordinary
+    /// included usage may still be spent — nil means "unavailable", which is
+    /// explicitly not "no": the protocol says clients must not infer recovery
+    /// from percentages or reset times.
+    /// </summary>
+    public static ProviderUsage ParseAppServerResponse(JsonElement result, string accountId, DateTimeOffset now)
+    {
+        // Groups: a rateLimitsByLimitId map, or a flat rateLimits object treated
+        // as the one unnamed account-wide group.
+        var groups = new List<KeyValuePair<string, JsonElement>>();
+        if (result.ValueKind == JsonValueKind.Object)
+        {
+            if (result.TryGetProperty("rateLimitsByLimitId", out var byId) && byId.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var group in byId.EnumerateObject())
+                    groups.Add(new KeyValuePair<string, JsonElement>(group.Name, group.Value.Clone()));
+            }
+            else if (result.TryGetProperty("rateLimits", out var flat) && flat.ValueKind == JsonValueKind.Object)
+            {
+                groups.Add(new KeyValuePair<string, JsonElement>("codex", flat.Clone()));
+            }
+        }
+
+        // Unnamed account-wide group first, then named per-model ones in a
+        // stable order, so rows don't jump around between refreshes.
+        var ordered = groups
+            .Select((kv, index) => (kv, index))
+            .OrderBy(entry =>
+            {
+                var named = entry.kv.Value.ValueKind == JsonValueKind.Object &&
+                            entry.kv.Value.TryGetProperty("limitName", out _);
+                return (named ? 1 : 0, entry.kv.Key);
+            })
+            .Select(entry => entry.kv)
+            .ToList();
+
+        // The server's own last word, applying to ALL groups: a sibling of them,
+        // not a member of one.
+        var ordinaryRefused = result.ValueKind == JsonValueKind.Object &&
+                              result.TryGetProperty("ordinaryUsageAllowed", out var oua) &&
+                              oua.ValueKind == JsonValueKind.False;
+
+        var windows = new List<UsageWindow>();
+        string? plan = null;
+        string? credits = null;
+
+        foreach (var (key, group) in ordered)
+        {
+            if (group.ValueKind != JsonValueKind.Object) continue;
+            var scope = Str(group, "limitName");
+
+            // This group's windows, marked spent group-scoped — the flag sits on
+            // the snapshot that holds the windows, never smeared across groups.
+            var ofThisGroup = new List<UsageWindow>();
+            foreach (var slot in new[] { "primary", "secondary" })
+            {
+                if (!group.TryGetProperty(slot, out var node) || node.ValueKind != JsonValueKind.Object) continue;
+                var percent = Num(node, "usedPercent");
+                if (percent is null) continue;
+
+                var minutes = Num(node, "windowDurationMins") is { } m ? (int)m : (int?)null;
+                var resets = Num(node, "resetsAt") is { } r
+                    ? DateTimeOffset.FromUnixTimeSeconds((long)r)
+                    : (DateTimeOffset?)null;
+
+                ofThisGroup.Add(new UsageWindow(
+                    Id: $"{key}.{slot}",
+                    Kind: minutes is { } mins ? KindForSeconds(mins * 60) : UsageWindowKind.Other,
+                    Scope: scope,
+                    UsedFraction: Math.Clamp(percent.Value, 0, 100) / 100,
+                    WindowSeconds: (minutes ?? 0) * 60,
+                    ResetsAt: resets));
+            }
+
+            var groupSpent = (group.TryGetProperty("spendControlReached", out var scr) && scr.ValueKind == JsonValueKind.True)
+                || (group.TryGetProperty("rateLimitReachedType", out var rlrt) && rlrt.ValueKind != JsonValueKind.Null)
+                || ordinaryRefused;
+            windows.AddRange(MarkingSpent(ofThisGroup, groupSpent));
+
+            plan ??= Str(result, "planType") ?? Str(group, "planType");
+            if (credits is null && group.TryGetProperty("credits", out var creditNode) &&
+                creditNode.ValueKind == JsonValueKind.Object)
+            {
+                var unlimited = creditNode.TryGetProperty("unlimited", out var unlim) && unlim.ValueKind == JsonValueKind.True;
+                if (!unlimited) credits = Str(creditNode, "balance");
+            }
+        }
+
+        return new ProviderUsage(
+            Provider: ProviderId.Codex,
+            AccountId: accountId,
+            Windows: windows,
+            ObservedAt: now,
+            State: windows.Count == 0 ? UsageState.Unavailable : UsageState.Live,
+            Plan: plan is { } p ? PlanName(p) : null,
+            CreditBalance: credits,
+            CreditRemaining: null,
+            Origin: UsageRoute.AppServer)
+        {
+            Unavailability = windows.Count == 0
+                ? new Unavailability(UnavailabilityKind.SchemaChanged, "no limits reported")
+                : null,
+        };
+    }
 
     /// <summary>What the plan is actually called, from the internal tier name.</summary>
     public static string PlanName(string raw) => raw.ToLowerInvariant() switch
