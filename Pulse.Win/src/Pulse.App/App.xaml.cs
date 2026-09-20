@@ -1,8 +1,10 @@
 using System.Windows;
 using Pulse.App.Bootstrap;
 using Pulse.App.Tray;
+using Pulse.App.Settings;
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
+using Pulse.Storage;
 using Pulse.Providers;
 
 namespace Pulse.App;
@@ -29,7 +31,7 @@ public partial class App : System.Windows.Application
         // in-memory until the vault milestone) holds pasted credentials. Providers
         // without a stored credential report CredentialMissing — a visible, honest
         // state, not a crash.
-        var store = new InMemoryCredentialStore();
+        var store = DpapiCredentialStore.IsWindowsSupported() ? new DpapiCredentialStore() : (ICredentialStore)new InMemoryCredentialStore();
         var adapters = ProviderRegistry.CreateAll(store);
         var accounts = Enum.GetValues<ProviderId>()
             .Select(id => new MonitoredAccount { Provider = id, AccountId = id.ToString() })
@@ -39,6 +41,7 @@ public partial class App : System.Windows.Application
 
         _tray = new NotifyIconTray();
         _tray.ShowRailRequested += () => _rail?.ShowAndRestore();
+        _tray.ShowSettingsRequested += () => new SettingsWindow(store).Show();
         _tray.ExitRequested += () =>
         {
             _coordinator?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));

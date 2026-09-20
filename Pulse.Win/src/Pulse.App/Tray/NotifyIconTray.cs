@@ -11,6 +11,7 @@ namespace Pulse.App.Tray;
 public sealed class NotifyIconTray : IDisposable
 {
     public event Action? ShowRailRequested;
+    public event Action? ShowSettingsRequested;
     public event Action? ExitRequested;
 
     private System.Windows.Forms.NotifyIcon? _icon;
@@ -26,6 +27,8 @@ public sealed class NotifyIconTray : IDisposable
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Show rail", null, (_, _) => ShowRailRequested?.Invoke());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add("Settings", null, (_, _) => ShowSettingsRequested?.Invoke());
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitRequested?.Invoke());
         _icon.ContextMenuStrip = menu;
