@@ -6,6 +6,40 @@
 **定位**：Windows 原生重写，不是 Swift 移植。复用上游的 Provider 协议知识、DTO、
 归一化算法、fixtures 与刷新语义；平台层、安全层、UI 层全部按 Windows 惯例重写。
 
+## 功能对齐状态（vs macOS 原版）
+
+### ✅ 已对齐
+
+| 能力 | 状态 |
+|---|---|
+| 19 个额度 Provider 的读取/解析层 | 全部移植（Claude、Codex、Antigravity、Cursor、OpenCode Go、Kimi、Ollama Cloud、z.ai、Zhipu GLM、MiniMax ×2、Copilot、Grok、Grok Bot、Volcengine、Command Code、DeepSeek、Devin、Xiaomi MiMo），上游语义铁律逐条锁定并有契约测试 |
+| 上游语义铁律 | 不发明百分比；exhausted 只来自 Provider 标志；剩余→已用只反转一次；windowSeconds 可能只是排序键；缺失金额≠0；Grok 缺失=0 与 GrokBot 缺失=unset 的相反规则 |
+| last-good 缓存 | scope 严格隔离；reset 已过窗口直接丢弃；无 reset 窗口 24h 上限；缓存读数永远标 stale |
+| 自适应刷新 | 单调度器 + 账户级 due time；2–30 分钟区间；余额类 Provider 5 分钟上限；进行中刷新合并；单 Provider 异常隔离 |
+| 合同健康 | Healthy/SchemaChanged/Unauthorized/CredentialExpired/RateLimited/ProviderUnavailable/UnsupportedPlatform 全链路，UI 显示诚实文案（"route changed" 而非崩溃） |
+| 凭据安全 | DPAPI CurrentUser 加密 vault（crypt32 interop）+ Windows Credential Manager；禁止明文 JSON/机器序列号派生；密钥配置 UI |
+| CLI 凭据借用（Windows 路径） | `~/.claude/.credentials.json`（含 expiresAt 校验）、`~/.codex/auth.json`（+ChatGPT-Account-Id 头）、`~/.grok/auth.json`（freshest unexpired）、`~/.commandcode/auth.json` |
+| OAuth/设备码 | Copilot GitHub Device Flow（`read:user` 仅限）；Claude loopback（任意端口，`user:profile` 仅限，exchange 带 state）；OpenAI Device Code（非 RFC 8628：403/404=等待，provider 生成 proof key，不带 state）；PKCE（challenge=SHA-256 of ENCODED verifier） |
+| 浏览器会话 Provider | Ollama Cloud + Xiaomi MiMo：仅用户主动粘贴 Cookie（allow-list 过滤 + 注入防护）；**绝不自动解密 Chrome Cookie**（App-Bound Encryption 是安全边界） |
+| Antigravity | 本地 language_server 进程/端口/CSRF 发现（app 优先于 IDE）；remainingFraction 反转一次；所有候选全部尝试 |
+| Rail UI | 无边框置顶悬浮条；左/右贴边 + 吸附；拖拽；位置按显示器+归一化偏移持久化（非绝对像素）；自动收起（2s 后收起、hover 展开）；19 环滚动布局；plan/reset/余额说明文字 |
+| 燃烧率预测 | 单读数 rate = spent share/elapsed share；仅在 reset 前 2 小时内给出；burn ≤ 1 无 wall |
+| 阈值通知 | crossing 触发一次（armed/disarmed 迟滞）；reset 变更重新武装；Provider exhausted 标志无视百分比；气泡通知 + Rail 双通道 |
+| Windows 集成 | 托盘图标（Explorer 重启自恢复）；命名互斥体单实例；HKCU Run 键开机启动（无需管理员）；设置窗口 |
+
+### 🚧 与原版仍有差距
+
+| 能力 | 差距 | 备注 |
+|---|---|---|
+| 多账号 UI | Claude/Codex/Grok/GrokBot 支持多账号（上游 `supportsMultipleAccounts`）；引擎已按账户隔离，UI 尚未暴露"添加账号" | OAuth 流程已就绪 |
+| Token Spend（54 数据源） | 本地 CLI transcript 历史统计、每日图表、按模型分类 | 独立子项目（上游也定位为 1.x） |
+| Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
+| Codex app-server fallback | `codex app-server` JSON-RPC 子进程路由 | Windows 版本待验证 |
+| Hover 详情卡片 | 上游 hover 显示全部窗口+预测；当前 Rail 直接显示说明文字 | 卡片是 UI 增强 |
+| 主题 | 深色 token 已有；Light/System 跟随未实现 | |
+| MSIX/签名/winget | 打包与自动更新链 | W8 计划 |
+| Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
+
 ## 技术栈
 
 | 项 | 选择 |
@@ -13,7 +47,8 @@
 | Runtime | .NET 10 LTS |
 | UI | WPF（Rail 悬浮条 + 托盘） |
 | 模式 | MVVM + 插件式 Provider |
-| 密钥存储 | Windows Credential Manager + DPAPI（规划中，当前为占位） |
+| 密钥存储 | DPAPI CurrentUser vault + Windows Credential Manager |
+| 认证 | GitHub Device Flow / OpenAI Device Code / Claude loopback OAuth |
 | 测试 | xUnit + Provider 契约测试（fixtures 来自上游 Apache-2.0 仓库） |
 | 打包 | MSIX + App Installer（规划中） |
 
@@ -22,23 +57,24 @@
 ```text
 Pulse.Win/
 ├─ src/
-│  ├─ Pulse.App/            WPF 应用（Rail 窗口、托盘、组合根）
-│  ├─ Pulse.Core/           领域模型：UsageWindow/ProviderUsage、缓存、自适应刷新引擎
-│  ├─ Pulse.Providers/      Provider 适配器（DeepSeek、Kimi Code、OpenCode Go）
+│  ├─ Pulse.App/            WPF 应用（Rail 窗口、托盘、设置、组合根）
+│  ├─ Pulse.Core/           领域模型：UsageWindow/ProviderUsage、缓存、刷新引擎、预测、告警
+│  ├─ Pulse.Providers/      19 个 Provider 适配器 + 注册表
+│  ├─ Pulse.Auth/           OAuth/设备码/loopback 登录流程
 │  ├─ Pulse.Diagnostics/    脱敏日志（canary 扫描、Bearer/Cookie/Authorization 拦截）
-│  └─ Pulse.Storage/        本地存储（占位）
+│  └─ Pulse.Storage/        DPAPI 凭据库 + Credential Manager
 ├─ tests/
-│  ├─ Pulse.Core.Tests/         归一化、缓存、刷新隔离、日志脱敏
+│  ├─ Pulse.Core.Tests/         归一化、缓存、刷新、预测、告警、OAuth、日志脱敏
 │  └─ Pulse.ProviderContract.Tests/  上游 fixtures 驱动的解析契约测试
 ```
 
 ## 核心语义（继承自上游，测试锁定）
 
 - **不发明百分比**：`UsedFraction` 只来自 Provider 报告；`IsExhausted` 只来自
-  Provider 自己的标志（DeepSeek `is_available=false`、OpenCode `status!="ok"`），
-  绝不用 `>=100%` 推断。
-- **剩余→已用只反转一次**：Kimi `detail.remaining`、Copilot `percent_remaining`
-  在适配器边界反转，下游全部是"已用"。
+  Provider 自己的标志，绝不用 `>=100%` 推断。
+- **剩余→已用只反转一次**：Kimi `detail.remaining`、Copilot `percent_remaining`、
+  Antigravity `remainingFraction`、MiniMax `*_remaining_percent` 在适配器边界反转，
+  下游全部是"已用"。
 - **windowSeconds 可能只是排序键**（`ReportsLength=false`），禁止拿来当真实时长。
 - **缺失金额 ≠ 0**：DeepSeek 金额解析失败时保持缺失（0 会画满红环）。
 - **缓存按账户 scope 隔离**；reset 已过的窗口直接丢弃；无 reset 的窗口 24h 上限；
@@ -47,6 +83,8 @@ Pulse.Win/
   单 Provider 异常被隔离，不影响同一轮其他 Provider。
 - **日志零明文凭据**：所有日志经脱敏器（Authorization/Cookie/Bearer/token 形态 +
   运行时注册的 canary 值）。
+- **不绕过浏览器安全边界**：会话凭据仅接受用户主动粘贴；无 Chrome 解密、无提权、
+  无注入。
 
 ## 运行
 
@@ -58,16 +96,7 @@ dotnet run --project src/Pulse.App
 ```
 
 需要 .NET 10 SDK（`winget install Microsoft.DotNet.SDK.10`）。
-应用启动后显示 Rail 悬浮条和托盘图标；Provider 密钥配置 UI 在后续里程碑交付。
-
-## 路线图
-
-| 里程碑 | 内容 |
-|---|---|
-| ✅ 当前 | Core 领域模型、刷新引擎、缓存、脱敏日志；3 个 key-based Provider + 契约测试；Rail/托盘雏形 |
-| 下一步 | Claude/Codex/Copilot 适配器、OAuth/设备码流程、凭据入库（Credential Manager） |
-| W6 | Rail 完整化：贴边停靠、自动收起、hover 详情、多显示器混合 DPI |
-| W7–W8 | 通知、开机启动、代理、性能基线、MSIX/自动更新 |
+应用启动后显示 Rail 悬浮条和托盘图标；在托盘 → Settings 中粘贴各 Provider 密钥。
 
 ## 许可
 
