@@ -13,6 +13,16 @@
     <Border Background="{StaticResource RailBackground}"
             CornerRadius="12"
             Padding="10,14">
-        <StackPanel x:Name="RingHost" VerticalAlignment="Center" />
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Background="Transparent">
+                <StackPanel x:Name="RingHost" VerticalAlignment="Center" />
+            </ScrollViewer>
+            <TextBlock x:Name="CollapseHint" Grid.Row="1" Text="◂" FontSize="10" Opacity="0.4"
+                       HorizontalAlignment="Center" Margin="0,4,0,0" />
+        </Grid>
     </Border>
 </Window>
