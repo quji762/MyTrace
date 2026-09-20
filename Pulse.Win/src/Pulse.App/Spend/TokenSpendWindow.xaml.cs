@@ -43,6 +43,8 @@ public partial class TokenSpendWindow : Window
         _kind = CodexTab.IsChecked == true ? TranscriptKind.Codex
             : OpenCodeTab.IsChecked == true ? TranscriptKind.OpenCode
             : CherryTab.IsChecked == true ? TranscriptKind.CherryStudio
+            : ClineTab.IsChecked == true ? TranscriptKind.Cline
+            : AmpTab.IsChecked == true ? TranscriptKind.Amp
             : TranscriptKind.ClaudeCode;
         Refresh();
     }
@@ -51,23 +53,9 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        if (_kind == TranscriptKind.CherryStudio)
+        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp)
         {
-            // Cherry Studio: Claude Code-shaped JSONL trees, stream-deduped.
-            var records = CherryStudioReader.Records();
-            var built = AgentUsageLedger.Build(records, _prices);
-            _ledger = built.Ledger;
-            SessionList.ItemsSource = built.Sessions
-                .Select(s => new SessionRow
-                {
-                    Name = s.Title ?? s.Name,
-                    Project = s.Project ?? "",
-                    TokensText = s.Tokens.ToString("N0"),
-                    EndText = s.End.ToLocalTime().ToString("MMM d HH:mm"),
-                })
-                .ToList();
-            RenderSummary();
-            RenderChart();
+            RenderRecordBased(_kind);
             return;
         }
 
@@ -92,6 +80,32 @@ public partial class TokenSpendWindow : Window
         RenderSummary();
         RenderChart();
         RenderSessions();
+    }
+
+    /// <summary>Record-based sources: CherryStudio, Cline, Amp — each reader
+    /// normalizes its store into AgentUsageRecords, one Build prices them all.</summary>
+    private void RenderRecordBased(TranscriptKind kind)
+    {
+        var records = kind switch
+        {
+            TranscriptKind.CherryStudio => CherryStudioReader.Records(),
+            TranscriptKind.Cline => ClineCliReader.Records(),
+            TranscriptKind.Amp => AmpSessionReader.Records(),
+            _ => Array.Empty<AgentUsageRecord>(),
+        };
+        var built = AgentUsageLedger.Build(records, _prices);
+        _ledger = built.Ledger;
+        SessionList.ItemsSource = built.Sessions
+            .Select(s => new SessionRow
+            {
+                Name = s.Title ?? s.Name,
+                Project = s.Project ?? "",
+                TokensText = s.Tokens.ToString("N0"),
+                EndText = s.End.ToLocalTime().ToString("MMM d HH:mm"),
+            })
+            .ToList();
+        RenderSummary();
+        RenderChart();
     }
 
     // --- Summary -----------------------------------------------------------------

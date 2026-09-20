@@ -42,6 +42,8 @@
 | Token Spend 首批数据源 | UsageLedger/LedgerDay/TokenTally 四类 token 计数 + 每刻钟 slot + 日聚合（缺口补齐）+ 定价（无价模型计数不计价）；Claude Code（消息 id 去重、<synthetic> 剔除、customTitle 优先）与 Codex（运行总量差分、cached 从 input 拆分）JSONL 解析器，经 %USERPROFILE% 路径 locator 扫描；OpenCode/Kilo SQLite store（reasoning 计入 output、store 自带 cost 忽略） |
 | Claude status-line hook（Windows 等价物） | settings.json 安装器（记住并恢复原 status line、首次备份、**拒改不可解析文件**）；`--statusline` 捕获模式（原子写入、used_percentage>101 防泄漏、垃圾输入静默）；app 启动分流；Claude Provider 在 endpoint 不可达/凭据失效时回落到捕获读数，超 10 分钟标 stale |
 | CherryStudio spend 源 | 同一 API 调用流式追加 3–4 份拷贝按 requestId（回落 message.id/uuid）折叠、逐字段最大值合并；V2 树优先于 V1 抢占同名会话路径；无身份记录独立保留 |
+| Cline CLI spend 源 | `<session>.messages.json` + manifest 对；`inputTokens` 为含缓存口径，扣减两种缓存后钳制零；env 根目录按 CLI 顺序（CLINE_SESSION_DATA_DIR→CLINE_DATA_DIR→CLINE_DIR→~/.cline）；无 ts 的消息不回填文件日期 |
+| Amp spend 源 | assistant 消息与 usageLedger.events 对账（toMessageId 优先、模型+token 数兜底），匹配的消息不重复发出——两侧都发会把每次调用翻倍；无事件戳的消息标 isAggregate 放到线程时间；完全无时间不发出并标 incomplete |
 | Token Spend 历史面板 | 每日 tokens 柱状图（零高度缺口日 + 无价份额帽）；会话列表（标题/项目/tokens/最近活动）；摘要行（全期与 7 天 tokens/cost、最忙日、top model 份额、无价模型）；托盘菜单直入 |
 
 ### 🚧 与原版仍有差距
@@ -50,7 +52,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 50 类数据源 | 首批 4 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 48 类数据源 | 首批 6 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |

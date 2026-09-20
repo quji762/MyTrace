@@ -13,6 +13,8 @@ public enum TranscriptKind
     Codex,
     OpenCode,
     CherryStudio,
+    Cline,
+    Amp,
 }
 
 public static partial class TranscriptLocator
