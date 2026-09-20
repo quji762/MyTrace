@@ -22,6 +22,8 @@ public enum TranscriptKind
     Kiro,
     Qwen,
     Gemini,
+    Crush,
+    ZCode,
 }
 
 public static partial class TranscriptLocator
