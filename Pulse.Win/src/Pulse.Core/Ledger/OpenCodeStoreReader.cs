@@ -16,6 +16,7 @@ public enum TranscriptKind
     Cline,
     Amp,
     Goose,
+    CopilotOtel,
 }
 
 public static partial class TranscriptLocator
