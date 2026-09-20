@@ -1,0 +1,18 @@
+<Window x:Class="Pulse.App.RailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pulse"
+        Width="120" Height="420"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowActivated="False">
+    <Border Background="{StaticResource RailBackground}"
+            CornerRadius="12"
+            Padding="10,14">
+        <StackPanel x:Name="RingHost" VerticalAlignment="Center" />
+    </Border>
+</Window>

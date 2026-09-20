@@ -1,0 +1,19 @@
+# .NET build artifacts
+bin/
+obj/
+artifacts/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+
+# Local secrets / dev data
+*.dat
+*.pfx

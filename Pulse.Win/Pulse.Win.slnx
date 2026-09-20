@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Pulse.App/Pulse.App.csproj" />
+    <Project Path="src/Pulse.Core/Pulse.Core.csproj" />
+    <Project Path="src/Pulse.Diagnostics/Pulse.Diagnostics.csproj" />
+    <Project Path="src/Pulse.Providers/Pulse.Providers.csproj" />
+    <Project Path="src/Pulse.Storage/Pulse.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Pulse.Core.Tests/Pulse.Core.Tests.csproj" />
+    <Project Path="tests/Pulse.ProviderContract.Tests/Pulse.ProviderContract.Tests.csproj" />
+  </Folder>
+</Solution>
