@@ -53,6 +53,15 @@ public partial class SettingsWindow : Window
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
+    protected override void OnClosed(EventArgs e)
+    {
+        // Persist the startup preference whenever settings close.
+        Pulse.Core.Platform.WindowsIntegration.SetLaunchAtStartup(_launchAtStartup);
+        base.OnClosed(e);
+    }
+
+    private bool _launchAtStartup = Pulse.Core.Platform.WindowsIntegration.IsLaunchAtStartupEnabled();
+
     private static string DisplayName(ProviderId id) => id switch
     {
         ProviderId.ClaudeCode => "Claude Code",

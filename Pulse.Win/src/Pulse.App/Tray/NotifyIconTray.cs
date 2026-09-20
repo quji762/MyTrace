@@ -48,6 +48,16 @@ public sealed class NotifyIconTray : IDisposable
         return SystemIcons.Application;
     }
 
+    /// <summary>Threshold alerts surface here as balloon tips. Never the only
+    /// channel: the rail itself carries the state.</summary>
+    public void ShowNotification(string title, string message)
+    {
+        if (_icon is null) return;
+        _icon.BalloonTipTitle = title;
+        _icon.BalloonTipText = message;
+        _icon.ShowBalloonTip(5000);
+    }
+
     public void Dispose()
     {
         _icon?.Dispose();
