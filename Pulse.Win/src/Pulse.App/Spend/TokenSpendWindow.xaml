@@ -38,7 +38,11 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="CopilotDesktopTab" Content="Copilot Desktop" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CopilotVsCodeTab" Content="Copilot VS Code" GroupName="spend" Margin="0,0,16,0"
+                <RadioButton x:Name="CopilotVsCodeTab" Content="Copilot VS Code" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="KiroTab" Content="Kiro" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="QwenTab" Content="Qwen" GroupName="spend" Margin="0,0,16,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
             </StackPanel>
             <Button Grid.Column="1" Content="Refresh" Padding="12,4" Click="OnRefresh" />

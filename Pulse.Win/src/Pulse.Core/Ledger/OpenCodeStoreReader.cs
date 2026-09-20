@@ -19,6 +19,8 @@ public enum TranscriptKind
     CopilotOtel,
     CopilotDesktop,
     CopilotVsCode,
+    Kiro,
+    Qwen,
 }
 
 public static partial class TranscriptLocator
