@@ -15,6 +15,7 @@ public enum TranscriptKind
     CherryStudio,
     Cline,
     Amp,
+    Goose,
 }
 
 public static partial class TranscriptLocator

@@ -30,7 +30,9 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="ClineTab" Content="Cline" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AmpTab" Content="Amp" GroupName="spend" Margin="0,0,16,0"
+                <RadioButton x:Name="AmpTab" Content="Amp" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="GooseTab" Content="Goose" GroupName="spend" Margin="0,0,16,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
             </StackPanel>
             <Button Grid.Column="1" Content="Refresh" Padding="12,4" Click="OnRefresh" />
