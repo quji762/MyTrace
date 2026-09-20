@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Pulse.App/Pulse.App.csproj" />
+    <Project Path="src/Pulse.Auth/Pulse.Auth.csproj" />
     <Project Path="src/Pulse.Core/Pulse.Core.csproj" />
     <Project Path="src/Pulse.Diagnostics/Pulse.Diagnostics.csproj" />
     <Project Path="src/Pulse.Providers/Pulse.Providers.csproj" />
