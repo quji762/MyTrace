@@ -2,6 +2,7 @@ using System.Windows;
 using Pulse.App.Bootstrap;
 using Pulse.App.Tray;
 using Pulse.App.Settings;
+using Pulse.App.Spend;
 using Pulse.Core.Accounts;
 using Pulse.Core.Notifications;
 using Pulse.Core.Platform;
@@ -78,6 +79,7 @@ public partial class App : System.Windows.Application
         _tray = new NotifyIconTray();
         _tray.ShowRailRequested += () => _rail?.ShowAndRestore();
         _tray.ShowSettingsRequested += () => new SettingsWindow(store) { Topmost = true }.Show();
+        _tray.ShowTokenSpendRequested += () => new TokenSpendWindow(new Pulse.Core.Ledger.TranscriptScanner()) { Topmost = true }.Show();
         _tray.ExitRequested += () =>
         {
             _coordinator?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
