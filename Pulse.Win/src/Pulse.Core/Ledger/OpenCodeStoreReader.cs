@@ -24,6 +24,8 @@ public enum TranscriptKind
     Gemini,
     Crush,
     ZCode,
+    Dsh,
+    Junie,
 }
 
 public static partial class TranscriptLocator
