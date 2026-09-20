@@ -26,6 +26,7 @@ public enum TranscriptKind
     ZCode,
     Dsh,
     Junie,
+    Codebuff,
 }
 
 public static partial class TranscriptLocator

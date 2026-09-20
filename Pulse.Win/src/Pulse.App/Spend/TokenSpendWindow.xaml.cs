@@ -55,6 +55,7 @@ public partial class TokenSpendWindow : Window
             : ZCodeTab.IsChecked == true ? TranscriptKind.ZCode
             : DshTab.IsChecked == true ? TranscriptKind.Dsh
             : JunieTab.IsChecked == true ? TranscriptKind.Junie
+            : CodebuffTab.IsChecked == true ? TranscriptKind.Codebuff
             : TranscriptKind.ClaudeCode;
         Refresh();
     }
@@ -63,7 +64,7 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie)
+        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff)
         {
             RenderRecordBased(_kind);
             return;
@@ -111,6 +112,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.ZCode => ZCodeReader.Records(),
             TranscriptKind.Dsh => DshUsageReader.Records(),
             TranscriptKind.Junie => JunieUsageReader.Records(),
+            TranscriptKind.Codebuff => CodebuffUsageReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),
         };
         var built = AgentUsageLedger.Build(records, _prices);

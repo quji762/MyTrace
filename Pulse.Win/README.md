@@ -55,6 +55,7 @@
 | ZCode spend 源 | JSONL（usage 优先、token_usage 回落、裸 total 记 unclassified）+ v2 SQLite store（schema 文档化 input 含缓存、output 含 reasoning：缓存从 input 扣除、reasoning **不二次折入** output；computed_total 超出 input+output 的部分记 unclassified）；缺列老 schema 用 NULL 占位适配 |
 | DSH spend 源 | session.jsonl[.zstd]：**后缀是物理、魔数是真**——仅当字节带 zstd frame magic 才解压（.NET 无内置 zstd，压缩帧如实报不可读而非静默清零）；seq < seedLength 的 fork 前缀跳过；reasoningTokens 是 outputTokens 子集保持原样；compaction/summary 也是真实调用；身份不含 session 前缀，fork 复制的调用与原版折叠 |
 | Junie spend 源 | events.jsonl 的 LlmResponseMetadataEvent.modelUsage[] 每项一次调用：**时间锚定在响应开始**（timestampMs − usage.time 延迟），timestampMs=0 视为未设回落到 session-YYMMDD-HHMMSS 自带日期；reasoning 与 output 并列且无 containment 声明→保持 output、标记 isPartial；cost 是产品自己的美元不读作 token |
+| Codebuff spend 源 | manicode* 树的 chat-messages.json：同一数字复制在 metadata.usage / metadata.codebuff.usage / runState history providerOptions 多处，**逐字段取第一个非零来源合并而非求和**（高优先级副本里的零不能掩盖真实计数）；credits 是产品的钱不是 token 类型；chat id 的时-分-秒破折号还原为时间戳；Freebuff 共享目录、互不双计 |
 | Token Spend 历史面板 | 每日 tokens 柱状图（零高度缺口日 + 无价份额帽）；会话列表（标题/项目/tokens/最近活动）；摘要行（全期与 7 天 tokens/cost、最忙日、top model 份额、无价模型）；托盘菜单直入 |
 
 ### 🚧 与原版仍有差距
@@ -63,7 +64,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 38 类数据源 | 首批 16 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 37 类数据源 | 首批 17 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
