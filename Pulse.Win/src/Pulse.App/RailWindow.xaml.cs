@@ -23,6 +23,8 @@ public partial class RailWindow : Window
     private const double CollapsedHeight = 120;
 
     private readonly Dictionary<ProviderId, RingControl> _rings = new();
+    private readonly Dictionary<ProviderId, ProviderUsage> _latest = new();
+    private readonly HoverDetailCard _hoverCard = new();
     private readonly RailPreferences _preferences;
     private readonly DispatcherTimer _collapseTimer;
     private System.Windows.Point _dragOffset;
@@ -93,12 +95,14 @@ public partial class RailWindow : Window
         if (!_rings.TryGetValue(account.Provider, out var ring))
         {
             ring = new RingControl(account.Provider.ToString());
+            ring.MouseEnter += (_, _) => ShowHover(account.Provider, ring);
             _rings[account.Provider] = ring;
             RingHost.Children.Add(ring);
         }
 
         if (result.Usage is { Windows.Count: > 0 } usage)
         {
+            _latest[account.Provider] = usage;
             var main = usage.Windows[0];
             ring.SetProgress(main.UsedFraction, main.IsExhausted);
             var caption = main.ResetsAt is { } reset
@@ -122,6 +126,12 @@ public partial class RailWindow : Window
                 _ => "unavailable",
             });
         }
+    }
+
+    private void ShowHover(ProviderId provider, UIElement target)
+    {
+        if (_latest.TryGetValue(provider, out var usage))
+            _hoverCard.ShowFor(usage, target);
     }
 
     // --- Docking & persistence ----------------------------------------------------
