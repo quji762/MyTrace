@@ -40,6 +40,7 @@
 | MSIX 发布链 | windows-release.yml：测试 → x64 发布 → MakeAppx → 签名（secrets 可选）→ canary 扫描 → Release；独立于上游 macOS 流水线 |
 | Codex app-server fallback | `codex app-server` JSON-RPC 子进程（握手/请求 ID/EOF 终止/20s 超时/rateLimits 推送钩子）；`account/rateLimits/read` 解析（分组排序、ordinaryUsageAllowed 全组标记、planType 顶层字段）；token 缺失或被拒时回落 |
 | Token Spend 首批数据源 | UsageLedger/LedgerDay/TokenTally 四类 token 计数 + 每刻钟 slot + 日聚合（缺口补齐）+ 定价（无价模型计数不计价）；Claude Code（消息 id 去重、<synthetic> 剔除、customTitle 优先）与 Codex（运行总量差分、cached 从 input 拆分）JSONL 解析器，经 %USERPROFILE% 路径 locator 扫描 |
+| Token Spend 历史面板 | 每日 tokens 柱状图（零高度缺口日 + 无价份额帽）；会话列表（标题/项目/tokens/最近活动）；摘要行（全期与 7 天 tokens/cost、最忙日、top model 份额、无价模型）；托盘菜单直入 |
 
 ### 🚧 与原版仍有差距
 
@@ -47,7 +48,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 历史图表 UI | Ledger 数据层与查询就绪；每日柱状图/会话列表 UI 待实现 | 数据模型已与上游对齐 |
+| Token Spend 其余 52 类数据源 | 首批 2 类（Claude/Codex transcript）+ 历史面板（每日柱状图/会话列表/摘要）已实现；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 待首个发布 tag 后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
