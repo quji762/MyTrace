@@ -56,6 +56,8 @@ public partial class TokenSpendWindow : Window
             : DshTab.IsChecked == true ? TranscriptKind.Dsh
             : JunieTab.IsChecked == true ? TranscriptKind.Junie
             : CodebuffTab.IsChecked == true ? TranscriptKind.Codebuff
+            : UnslothTab.IsChecked == true ? TranscriptKind.Unsloth
+            : JcodeTab.IsChecked == true ? TranscriptKind.Jcode
             : MuxTab.IsChecked == true ? TranscriptKind.Mux
             : GjcTab.IsChecked == true ? TranscriptKind.Gjc
             : TranscriptKind.ClaudeCode;
@@ -115,6 +117,8 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Dsh => DshUsageReader.Records(),
             TranscriptKind.Junie => JunieUsageReader.Records(),
             TranscriptKind.Codebuff => CodebuffUsageReader.Records(),
+            TranscriptKind.Unsloth => UnslothReader.Records(),
+            TranscriptKind.Jcode => JcodeUsageReader.Records(),
             TranscriptKind.Mux => MuxUsageReader.Records(),
             TranscriptKind.Gjc => GjcUsageReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),

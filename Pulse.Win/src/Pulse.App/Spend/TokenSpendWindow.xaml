@@ -54,6 +54,10 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="CodebuffTab" Content="Codebuff" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="UnslothTab" Content="Unsloth" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="JcodeTab" Content="Jcode" GroupName="spend" Margin="0,0,16,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="MuxTab" Content="Mux" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="GjcTab" Content="GJC" GroupName="spend" Margin="0,0,16,0"

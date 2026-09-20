@@ -29,6 +29,8 @@ public enum TranscriptKind
     Codebuff,
     Mux,
     Gjc,
+    Unsloth,
+    Jcode,
 }
 
 public static partial class TranscriptLocator
