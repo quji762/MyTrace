@@ -29,33 +29,41 @@ public static class PiFamilySessionReader
         if (ConfigurationFor(client) is not { } configuration) return Array.Empty<AgentUsageRecord>();
 
         var home = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var roots = new List<string>();
-        foreach (var (clientName, directory) in new[]
-                 {
-                     ("pi", "pi"), ("omp", "omp"), ("senpi", "senpi"), ("kimchi", "kimchi"),
-                 })
+        // Roots follow upstream SessionLogPaths exactly: the agent segment is
+        // part of the real layout (`.pi/agent/sessions`), and Kimchi lives
+        // under .config/kimchi/harness rather than its own dot-directory.
+        var root = client switch
         {
-            if (clientName == client)
-                roots.Add(Path.Combine(home, "." + directory, "sessions"));
-        }
+            "pi" => Path.Combine(home, ".pi", "agent", "sessions"),
+            "omp" => Path.Combine(home, ".omp", "agent", "sessions"),
+            "senpi" => Path.Combine(home, ".senpi", "agent", "sessions"),
+            "kimchi" => Path.Combine(home, ".config", "kimchi", "harness", "sessions"),
+            _ => null,
+        };
         // Only the matching client's root is scanned; a root that does not
         // exist reads as empty.
-        if (roots.Count == 0 || !Directory.Exists(roots[0])) return Array.Empty<AgentUsageRecord>();
+        if (root is null || !Directory.Exists(root)) return Array.Empty<AgentUsageRecord>();
 
         var files = new List<PiTranscript.ParsedFile>();
-        foreach (var file in Directory.EnumerateFiles(roots[0], "*.jsonl", SearchOption.AllDirectories)
+        foreach (var file in Directory.EnumerateFiles(root, "*.jsonl", SearchOption.AllDirectories)
                      .OrderBy(f => f, StringComparer.Ordinal))
             files.Add(PiTranscript.Parse(file));
 
         // Senpi's OmO children live outside its sessions tree, under the
-        // working directory each header names.
+        // working directory each header names: `<cwd>/.omo/senpi-task/children`.
         if (configuration.DiscoversProjectChildren)
         {
-            var known = files.Select(f => f.Path).ToHashSet();
-            foreach (var extra in Directory.EnumerateFiles(roots[0], "*.jsonl", SearchOption.AllDirectories))
+            var known = files.Select(f => Path.GetFullPath(f.Path)).ToHashSet();
+            foreach (var cwd in CwdValues(root))
             {
-                if (known.Contains(Path.GetFullPath(extra))) continue;
-                files.Add(PiTranscript.Parse(extra));
+                var children = Path.Combine(cwd, ".omo", "senpi-task", "children");
+                if (!Directory.Exists(children)) continue;
+                foreach (var extra in Directory.EnumerateFiles(children, "*.jsonl", SearchOption.AllDirectories)
+                             .OrderBy(f => f, StringComparer.Ordinal))
+                {
+                    if (!known.Add(Path.GetFullPath(extra))) continue;
+                    files.Add(PiTranscript.Parse(extra));
+                }
             }
         }
 
@@ -92,6 +100,42 @@ public static class PiFamilySessionReader
     }
 
     private static AgentUsageRecord MarkPartial(AgentUsageRecord record) => record with { IsPartial = true };
+
+    /// <summary>The working directories recorded by the session headers under
+    /// a root. Discovery needs the header alone, not every conversation.</summary>
+    private static IEnumerable<string> CwdValues(string root)
+    {
+        var cwds = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(root, "*.jsonl", SearchOption.AllDirectories)
+                     .OrderBy(f => f, StringComparer.Ordinal))
+        {
+            string? cwd = null;
+            try
+            {
+                foreach (var line in File.ReadLines(file))
+                {
+                    JsonDocument document;
+                    try { document = JsonDocument.Parse(line); }
+                    catch (JsonException) { continue; }
+                    using (document)
+                    {
+                        var row = document.RootElement;
+                        if (row.ValueKind != JsonValueKind.Object) continue;
+                        var type = row.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+                        if (type == "title") continue;
+                        if (type != "session") break;
+                        var id = row.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : null;
+                        if (id is null) break;
+                        cwd = row.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+                        break;
+                    }
+                }
+            }
+            catch (Exception) { }
+            if (cwd is { } value) cwds.Add(value);
+        }
+        return cwds;
+    }
 
     /// <summary>A fork copy of a message folds onto its original by response id,
     /// or by a composite of the message's own fields; Kimchi's older scheme

@@ -19,7 +19,15 @@ public class PiFamilySessionReaderTests : IDisposable
         try { Directory.Delete(_home, recursive: true); } catch (IOException) { }
     }
 
-    private string SessionsDir(string client) => Path.Combine(_home, "." + client, "sessions");
+    private string SessionsDir(string client) => client switch
+    {
+        // The real layouts, per upstream SessionLogPaths.
+        "pi" => Path.Combine(_home, ".pi", "agent", "sessions"),
+        "omp" => Path.Combine(_home, ".omp", "agent", "sessions"),
+        "senpi" => Path.Combine(_home, ".senpi", "agent", "sessions"),
+        "kimchi" => Path.Combine(_home, ".config", "kimchi", "harness", "sessions"),
+        _ => Path.Combine(_home, "." + client, "sessions"),
+    };
 
     private void WriteSession(string client, string stem, params string[] lines)
     {
@@ -79,6 +87,26 @@ public class PiFamilySessionReaderTests : IDisposable
             Assistant("r1", input: 10, output: 1));
         var record = Assert.Single(PiFamilySessionReader.Records("senpi", _home));
         Assert.Equal("My chat title", record.Title);
+    }
+
+    [Fact]
+    public void Senpi_Discovers_OmO_Project_Children()
+    {
+        // A session header names its working directory; Senpi's OmO task
+        // children live under <cwd>/.omo/senpi-task/children, outside the
+        // sessions tree. Pi has the same header shape and no discovery.
+        var project = Path.Combine(_home, "proj");
+        var children = Path.Combine(project, ".omo", "senpi-task", "children");
+        Directory.CreateDirectory(children);
+        File.WriteAllLines(Path.Combine(children, "c1.jsonl"),
+            new[] { Header, Assistant("r1", input: 30, output: 10) });
+
+        var projectHeader = $"{{\"type\":\"session\",\"id\":\"s1\",\"cwd\":\"{project.Replace("\\", "/")}\"}}";
+        WriteSession("senpi", "s1", projectHeader, Assistant("r2", input: 10, output: 1));
+        Assert.Equal(2, PiFamilySessionReader.Records("senpi", _home).Count);
+
+        WriteSession("pi", "s1", projectHeader, Assistant("r2", input: 10, output: 1));
+        Assert.Single(PiFamilySessionReader.Records("pi", _home));
     }
 
     [Fact]

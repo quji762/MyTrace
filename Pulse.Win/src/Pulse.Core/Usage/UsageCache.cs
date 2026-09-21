@@ -5,7 +5,6 @@ namespace Pulse.Core.Usage;
 
 /// <summary>
 /// Last-good cache ported from upstream UsageCache semantics:
-/// - Restores last good readings on cold start (stale display, "as of").
 /// - Windows whose reset has passed are dropped immediately, not aged.
 /// - Windows that never claim a reset age out after <see cref="MaximumAge"/> (24h upstream).
 /// - Cache entries are keyed by full account scope (provider + account id) so switching

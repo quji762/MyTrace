@@ -87,7 +87,6 @@
 
 | 能力 | 差距 | 备注 |
 |---|---|---|
-| Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
 | Token Spend 其余 13 类数据源 | 首批 41 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
