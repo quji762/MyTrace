@@ -58,6 +58,7 @@ public partial class TokenSpendWindow : Window
             : CodebuffTab.IsChecked == true ? TranscriptKind.Codebuff
             : UnslothTab.IsChecked == true ? TranscriptKind.Unsloth
             : JcodeTab.IsChecked == true ? TranscriptKind.Jcode
+            : FxTab.IsChecked == true ? TranscriptKind.Fx
             : MuxTab.IsChecked == true ? TranscriptKind.Mux
             : GjcTab.IsChecked == true ? TranscriptKind.Gjc
             : TranscriptKind.ClaudeCode;
@@ -119,6 +120,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Codebuff => CodebuffUsageReader.Records(),
             TranscriptKind.Unsloth => UnslothReader.Records(),
             TranscriptKind.Jcode => JcodeUsageReader.Records(),
+            TranscriptKind.Fx => FxUsageReader.Records(),
             TranscriptKind.Mux => MuxUsageReader.Records(),
             TranscriptKind.Gjc => GjcUsageReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),

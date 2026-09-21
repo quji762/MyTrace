@@ -31,6 +31,7 @@ public enum TranscriptKind
     Gjc,
     Unsloth,
     Jcode,
+    Fx,
 }
 
 public static partial class TranscriptLocator
