@@ -66,6 +66,7 @@
 | RooCode/KiloCode/Cline spend 源 | VS Code task log（ui_messages.json）：只计 `api_req_started` 项，四种 token 在 text 字段里嵌套 JSON；modelInfo 优先、conversation history 的最后 `<model>` 标签兜底、`<slug>`/`<name>` 作 agent 名；ts=0 与不可解析时间戳跳过；三编辑器布局（Code/Insiders/VSCodium）+ .config + .vscode-server 均被探测 |
 | Hindsight spend 源 | 自托管记忆服务 llm-requests 的 JSONL 镜像（滚动窗口的持久副本，读账本不读服务）：用户编辑的文件不可信——不解码/无 id/无 started_at/total≤0/无 input 且无 output 的行跳过；cached_tokens 是 cache-read 桶、cache write 不报、reasoning 不分出；bank 是 project、operation/scope 组成标题 |
 | Mcode spend 源（MiniMax Code headless 流捕获） | usage 按 turnId 缓冲，直到 exec.result 供应模型才发出（无模型的流不可用，绝不猜）；消息只按自身 id 合并（流式重述替换原条目），无 id 则每行独立；裸 totalTokens 记 unclassified；BOM 与单行坏字节不丢其余捕获 |
+| Trae spend 源 | usage API 的 JSON 数组导出：Auto 模式行归 trae-&lt;mode&gt;（真实逐轮模型不可恢复）、已知名映射到 provider id（Claude Sonnet 4.5→claude-sonnet-4-5 等）、未知名原样透传计为 unpriced；**同页等值行不合并**（可能是两次请求）、**跨页按内容多重集对账**（{A}+{A,B}→A 和 B）、共享区域标 partial、字节相同页直接折叠 |
 | OpenCodeReview spend 源 | session JSONL 的 llm_response：持久化 usage 无 total 也无 provider 路径记录，裸求和可能双计——store 自带的 total（变体携带时）是唯一权威（=disjoint→四类独立；=prompt+completion→cache 在 prompt 内相减；都不匹配→整 total 记 unclassified 而非猜测拆分）；**无 total 且有正 cache→不可证明，整条不发出**，余下可读记录标 partial；uuid 折叠重放、无 uuid 用文件内容摘要+行位置；duration 把时间锚定到请求开始 |
 | CommandCode spend 源（transcript 侧） | projects/<slug>/ 的 JSONL 树：每条目命名 parentId，/rewind 移动叶子但**被放弃回复的用量保留在盘上**（回退上下文不退还已消耗的 token）——每个分支的回复都计数；消息身份折叠重放、祖先链只解析回复所用模型（**另一分支的模型变更不能改价**，记忆化保持长分支线性）；legacy 扁平格式无 usage 即无估算（字符数不是报告的 token）；checkpoints 文件排除 |
 | CodeBuddy/WorkBuddy spend 源 | 三形状按文件分派：JSONL transcript（唯一可对账通道，messageId/traceId 折叠镜像写入、更完整快照胜出、非 completed 状态不计）、扩展日志（[AgentReporter]/[CraftInvokableAgent]，naive 本地时间戳即时间本身）、WorkBuddy SQLite（每会话一条聚合，记 unclassified 不冒充 input）。**transcript 存在时 fallback 不追加**（共享不了身份会双计）→ transcript 标 partial；log 的无身份行独立计数（按时间折叠会丢真实请求） |
@@ -80,7 +81,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 22 类数据源 | 首批 32 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 21 类数据源 | 首批 33 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
