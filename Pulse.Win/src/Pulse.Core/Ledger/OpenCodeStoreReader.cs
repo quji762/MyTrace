@@ -56,6 +56,8 @@ public enum TranscriptKind
     DevinCli,
     Grok,
     KimiCli,
+    DevinDesktop,
+    AntigravityCli,
 }
 
 public static partial class TranscriptLocator

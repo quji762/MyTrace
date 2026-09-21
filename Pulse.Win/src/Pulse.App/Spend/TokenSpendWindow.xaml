@@ -110,7 +110,11 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="GrokTab" Content="Grok Build" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="KimiCliTab" Content="Kimi CLI" GroupName="spend" Margin="0,0,16,0"
+                <RadioButton x:Name="KimiCliTab" Content="Kimi CLI" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="DevinDesktopTab" Content="Devin Desktop" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="AntigravityCliTab" Content="Antigravity CLI" GroupName="spend" Margin="0,0,16,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="AntigravityTab" Content="Antigravity" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />

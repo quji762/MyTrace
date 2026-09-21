@@ -80,6 +80,8 @@
 | Devin CLI spend 源 | ~/.local/share/devin/cli/sessions.db 的 message_nodes：assistant 的 metadata.metrics 四桶逐条计数（cache_creation_tokens 为 null 即缺席不是零）；**与额度路由不是同一个 store**（桌面应用的套餐数据库互不相通）；元数据行/空 metrics/无日期消息不是用量；秒与毫秒 epoch 都容忍；缺模型回落 devin 占位 |
 | Grok Build spend 源 | ~/.grok/sessions/<百分编码工作目录>/<run>/updates.jsonl：**只有 turn_completed 且带 usage 的事件计数**；**modelUsage 才是模型名**（一轮可触多个模型，逐个读；并列的扁平总量只在 modelUsage 缺席时兜底）；reasoning 折入 output；开头 user_message_chunk 给 uuid 行一个标题；目录名百分解码即项目 |
 | Kimi CLI spend 源 | ~/.kimi/sessions/<id>/wire.jsonl：**input_other 是新输入**（cache read/creation 并列计入而非含入——与 Claude Code 同、与 Codex 反）；**全程不写模型名**——token 照常计数、永不计价（占位 id 刻意不被任何价目表匹配）；标题在旁边 state.json 的 custom_title 里；无时间戳/零时间戳行跳过 |
+| Devin Desktop spend 源 | User/acp-events 的 *.ndjson 捕获（CLI 数据库只作查找不作计数）：**两种形状按证据分辨**——canonical ACP usage_update（_meta 前缀 cognition.ai/）每文件一条聚合（inputTokens 是完整 prompt 扣 cachedRead、output 逐 step 累加、cache 桶覆盖），legacy 形状（下划线字段）每事件一条；**数据库供给身份不供额外 token**——title 唯一匹配恢复会话 id/模型/工作区，多数捕获无量（CLI 数据库才是权威，差额绝不发明）；被目录计数的会话其镜像捕获排除；adaptive 是路由模式不是模型→unknown（无价名）；无时间戳跳过，不用 mtime |
+| Antigravity CLI spend 源 | 每会话一 SQLite，用量在 protobuf blob：自带**边界安全的极简 wire 解码**（截断/超长 varint/越界长度/未知 wire type 整条失败而非越界读）；**只计语义确证的 #2/#5/#9/#10**（#1 是逆向推测不是计数——不读不记），#9+#10 契约为总输出折一次；**每条 isPartial**（排除 #1 又无总量可对账=已证子集）；时间只认逐代显式戳与 steps 表（未知 #9.#10 字节绝不解释成时间），无戳回落会话锚并标 aggregate，绝不用文件 mtime；CLI 与 IDE 两个 client 永不相加 |
 | OpenCodeReview spend 源 | session JSONL 的 llm_response：持久化 usage 无 total 也无 provider 路径记录，裸求和可能双计——store 自带的 total（变体携带时）是唯一权威（=disjoint→四类独立；=prompt+completion→cache 在 prompt 内相减；都不匹配→整 total 记 unclassified 而非猜测拆分）；**无 total 且有正 cache→不可证明，整条不发出**，余下可读记录标 partial；uuid 折叠重放、无 uuid 用文件内容摘要+行位置；duration 把时间锚定到请求开始 |
 | CapturedCSV 基础层 | RFC 4180 记录读取器（legacy Cursor cache 的前置）：引号字段含逗号与双写引号、三种换行、BOM 剥离、无尾随换行的末记录保留、未终止引号跑到文件尾——**只产字段行不是 schema**，表头/数值/空白的解释归调用者 |
 | CommandCode spend 源（transcript 侧） | projects/<slug>/ 的 JSONL 树：每条目命名 parentId，/rewind 移动叶子但**被放弃回复的用量保留在盘上**（回退上下文不退还已消耗的 token）——每个分支的回复都计数；消息身份折叠重放、祖先链只解析回复所用模型（**另一分支的模型变更不能改价**，记忆化保持长分支线性）；legacy 扁平格式无 usage 即无估算（字符数不是报告的 token）；checkpoints 文件排除 |
@@ -94,7 +96,7 @@
 | 能力 | 差距 | 备注 |
 |---|---|---|
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 7 类数据源 | 首批 47 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板 + models.dev 每日价目（离线回落上一份缓存）；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析（antigravity-cli/ide、devin-desktop、Devin Desktop 侧车对账） | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 5 类数据源 | 首批 49 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板 + models.dev 每日价目（离线回落上一份缓存）；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析（antigravity-ide 双布局、Devin Desktop 会话侧路由） | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
