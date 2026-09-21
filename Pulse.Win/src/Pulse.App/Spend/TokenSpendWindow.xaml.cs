@@ -21,6 +21,7 @@ namespace Pulse.App.Spend;
 public partial class TokenSpendWindow : Window
 {
     private readonly TranscriptScanner _scanner;
+    private readonly string? _vsCodeHome;
     private readonly ModelPrices _prices;
     private TranscriptKind _kind = TranscriptKind.ClaudeCode;
     private UsageLedger _ledger = UsageLedger.EmptyLedger;
@@ -29,11 +30,12 @@ public partial class TokenSpendWindow : Window
 
     private const int SummaryWindowDays = 7;
 
-    public TokenSpendWindow(TranscriptScanner? scanner = null, ModelPrices? prices = null)
+    public TokenSpendWindow(TranscriptScanner? scanner = null, ModelPrices? prices = null, string? userProfile = null)
     {
         InitializeComponent();
         _scanner = scanner ?? new TranscriptScanner();
         _prices = prices ?? ModelPrices.Empty;
+        _vsCodeHome = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         ClaudeTab.IsChecked = true;
     }
 
