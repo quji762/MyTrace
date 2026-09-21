@@ -62,6 +62,7 @@
 | Unsloth spend 源 | studio.db 双路径：chat_messages 的 contextUsage 归一化（cache read 受 prompt 上限、cache write 受余量上限、total 提升至 prompt+completion、余量归 input，reasoning 折入 output 一次）+ api_usage_events（无缓存/无 reasoning 桶，input=total−completion）；providerType 路由名不作价键；零时间戳/无身份行跳过 |
 | Jcode spend 源 | session + journal append 重放；缓存形状**只由显式标记判定**（Anthropic 式 cache_creation 键=input 独占；OpenAI 式 details 对象=cache 是 input 子集；两者皆无的正 cache 读=input 记 unclassified、标记 partial——量级从不用来推断约定）；reasoning_output_tokens 与 output 并列无声明→保持 output、标 partial；journal meta.model 重放更新后续消息的模型 |
 | Fx spend 源 | per-session usage-v2.json + session.json sidecar + index.json 标题：每模型一条累计记录（models 空而聚合有用量时在 fx-unknown 下发出一次，总数不丢）；reasoning 与 output 并列无声明→保持 output、标 partial；updated_at_ms=0 回落 created_at_ms，两者皆无跳过（不用 mtime 编造）；total_cost 是产品美元不读作 token |
+| OpenClaw spend 源 | SQLite（transcript_events）+ legacy JSONL 双 store，事件形状相同且 doctor --fix 会导入原文件——身份是**跨 store 的**（event id+时间戳+计数），同一调用进两个 store 也不会双计；reasoningTokens 文档化为 output 子集（仅在 output 缺席时补位）；openclaw-transcript/delivery-mirror/gateway-injected 等记账行跳过；model_change/model-snapshot 的 bookkeeping 模型向前携带；bare totalTokens 记 unclassified；.zst 与 codex-home 镜像不读 |
 | Token Spend 历史面板 | 每日 tokens 柱状图（零高度缺口日 + 无价份额帽）；会话列表（标题/项目/tokens/最近活动）；摘要行（全期与 7 天 tokens/cost、最忙日、top model 份额、无价模型）；托盘菜单直入 |
 
 ### 🚧 与原版仍有差距
@@ -70,7 +71,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 32 类数据源 | 首批 22 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 31 类数据源 | 首批 23 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |

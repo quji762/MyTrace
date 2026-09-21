@@ -32,6 +32,7 @@ public enum TranscriptKind
     Unsloth,
     Jcode,
     Fx,
+    OpenClaw,
 }
 
 public static partial class TranscriptLocator
