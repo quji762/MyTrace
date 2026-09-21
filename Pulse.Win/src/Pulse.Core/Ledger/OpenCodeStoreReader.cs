@@ -50,6 +50,9 @@ public enum TranscriptKind
     Zed,
     Hermes,
     Micode,
+    Reasonix,
+    Augment,
+    Warp,
 }
 
 public static partial class TranscriptLocator

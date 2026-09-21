@@ -100,7 +100,13 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="CursorTab" Content="Cursor" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AntigravityTab" Content="Antigravity" GroupName="spend" Margin="0,0,16,0"
+                <RadioButton x:Name="ReasonixTab" Content="Reasonix" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="AugmentTab" Content="Augment" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="WarpTab" Content="Warp" GroupName="spend" Margin="0,0,16,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="AntigravityTab" Content="Antigravity" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
             </StackPanel>
             <Button Grid.Column="1" Content="Refresh" Padding="12,4" Click="OnRefresh" />

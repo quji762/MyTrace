@@ -109,6 +109,9 @@ public partial class TokenSpendWindow : Window
             : TraeTab.IsChecked == true ? TranscriptKind.Trae
             : CopilotLogTab.IsChecked == true ? TranscriptKind.CopilotCombined
             : CursorTab.IsChecked == true ? TranscriptKind.CursorCaptured
+            : ReasonixTab.IsChecked == true ? TranscriptKind.Reasonix
+            : AugmentTab.IsChecked == true ? TranscriptKind.Augment
+            : WarpTab.IsChecked == true ? TranscriptKind.Warp
             : AntigravityTab.IsChecked == true ? TranscriptKind.AntigravityCaptured
             : TranscriptKind.ClaudeCode;
         Refresh();
@@ -118,7 +121,7 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff or TranscriptKind.Unsloth or TranscriptKind.Jcode or TranscriptKind.Fx or TranscriptKind.OpenClaw or TranscriptKind.Droid or TranscriptKind.Mux or TranscriptKind.Gjc or TranscriptKind.Pi or TranscriptKind.PrimeAgent or TranscriptKind.RooCode or TranscriptKind.Codebuddy or TranscriptKind.Hermes or TranscriptKind.Zed or TranscriptKind.LmStudio or TranscriptKind.Micode or TranscriptKind.OpenCodeReview or TranscriptKind.CommandCode or TranscriptKind.Crush or TranscriptKind.Hindsight or TranscriptKind.Mcode or TranscriptKind.Trae or TranscriptKind.CopilotCombined or TranscriptKind.CursorCaptured or TranscriptKind.AntigravityCaptured)
+        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff or TranscriptKind.Unsloth or TranscriptKind.Jcode or TranscriptKind.Fx or TranscriptKind.OpenClaw or TranscriptKind.Droid or TranscriptKind.Mux or TranscriptKind.Gjc or TranscriptKind.Pi or TranscriptKind.PrimeAgent or TranscriptKind.RooCode or TranscriptKind.Codebuddy or TranscriptKind.Hermes or TranscriptKind.Zed or TranscriptKind.LmStudio or TranscriptKind.Micode or TranscriptKind.OpenCodeReview or TranscriptKind.CommandCode or TranscriptKind.Crush or TranscriptKind.Hindsight or TranscriptKind.Mcode or TranscriptKind.Trae or TranscriptKind.CopilotCombined or TranscriptKind.CursorCaptured or TranscriptKind.AntigravityCaptured or TranscriptKind.Reasonix or TranscriptKind.Augment or TranscriptKind.Warp)
         {
             RenderRecordBased(_kind);
             return;
@@ -194,6 +197,9 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Hermes => HermesReader.Records(),
             TranscriptKind.Micode => MicodeReader.Records(),
             TranscriptKind.Crush => CrushReader.Records(),
+            TranscriptKind.Reasonix => ReasonixUsageReader.Records(),
+            TranscriptKind.Augment => AugmentUsageReader.Records(),
+            TranscriptKind.Warp => CapturedWarpReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),
         };
         var built = AgentUsageLedger.Build(records, _prices ?? ModelPrices.Empty);
