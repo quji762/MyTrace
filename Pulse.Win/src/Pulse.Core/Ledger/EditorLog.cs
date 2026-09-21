@@ -11,7 +11,7 @@ namespace Pulse.Core.Ledger;
 /// </summary>
 public static class EditorLog
 {
-    public sealed record UsageParts(TokenTally Tally, int Unclassified);
+    public sealed record UsageParts(TokenTally Tally, int Unclassified = 0);
 
     /// <summary>The first named key that carries a real count.</summary>
     public static int? FirstCount(JsonElement @object, params string[] keys)
