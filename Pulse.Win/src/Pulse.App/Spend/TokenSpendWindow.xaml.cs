@@ -60,6 +60,7 @@ public partial class TokenSpendWindow : Window
             : JcodeTab.IsChecked == true ? TranscriptKind.Jcode
             : FxTab.IsChecked == true ? TranscriptKind.Fx
             : OpenClawTab.IsChecked == true ? TranscriptKind.OpenClaw
+            : DroidTab.IsChecked == true ? TranscriptKind.Droid
             : MuxTab.IsChecked == true ? TranscriptKind.Mux
             : GjcTab.IsChecked == true ? TranscriptKind.Gjc
             : TranscriptKind.ClaudeCode;
@@ -123,6 +124,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Jcode => JcodeUsageReader.Records(),
             TranscriptKind.Fx => FxUsageReader.Records(),
             TranscriptKind.OpenClaw => OpenClawSessionReader.Records(),
+            TranscriptKind.Droid => DroidSessionReader.Records(),
             TranscriptKind.Mux => MuxUsageReader.Records(),
             TranscriptKind.Gjc => GjcUsageReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),

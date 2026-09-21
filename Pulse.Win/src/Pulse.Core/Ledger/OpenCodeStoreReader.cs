@@ -33,6 +33,7 @@ public enum TranscriptKind
     Jcode,
     Fx,
     OpenClaw,
+    Droid,
 }
 
 public static partial class TranscriptLocator
