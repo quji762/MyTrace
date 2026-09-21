@@ -64,6 +64,7 @@
 | Fx spend 源 | per-session usage-v2.json + session.json sidecar + index.json 标题：每模型一条累计记录（models 空而聚合有用量时在 fx-unknown 下发出一次，总数不丢）；reasoning 与 output 并列无声明→保持 output、标 partial；updated_at_ms=0 回落 created_at_ms，两者皆无跳过（不用 mtime 编造）；total_cost 是产品美元不读作 token |
 | OpenClaw spend 源 | SQLite（transcript_events）+ legacy JSONL 双 store，事件形状相同且 doctor --fix 会导入原文件——身份是**跨 store 的**（event id+时间戳+计数），同一调用进两个 store 也不会双计；reasoningTokens 文档化为 output 子集（仅在 output 缺席时补位）；openclaw-transcript/delivery-mirror/gateway-injected 等记账行跳过；model_change/model-snapshot 的 bookkeeping 模型向前携带；bare totalTokens 记 unclassified；.zst 与 codex-home 镜像不读 |
 | RooCode/KiloCode/Cline spend 源 | VS Code task log（ui_messages.json）：只计 `api_req_started` 项，四种 token 在 text 字段里嵌套 JSON；modelInfo 优先、conversation history 的最后 `<model>` 标签兜底、`<slug>`/`<name>` 作 agent 名；ts=0 与不可解析时间戳跳过；三编辑器布局（Code/Insiders/VSCodium）+ .config + .vscode-server 均被探测 |
+| CodeBuddy/WorkBuddy spend 源 | 三形状按文件分派：JSONL transcript（唯一可对账通道，messageId/traceId 折叠镜像写入、更完整快照胜出、非 completed 状态不计）、扩展日志（[AgentReporter]/[CraftInvokableAgent]，naive 本地时间戳即时间本身）、WorkBuddy SQLite（每会话一条聚合，记 unclassified 不冒充 input）。**transcript 存在时 fallback 不追加**（共享不了身份会双计）→ transcript 标 partial；log 的无身份行独立计数（按时间折叠会丢真实请求） |
 | Droid spend 源 | settings.json 的**会话累计总量**（单条 isAggregate 记录，不拆到回复）：totalTokenCount 是唯一权威——对四种候选恒等式（reasoning 并入/独立 × cache 含入/并列）逐一求和验证，恰匹配一种才落地；都不匹配→整 total 记 unclassified（总数完整、只是种类未知，isPartial=false）；无 total 且有正 cache→output 保留、input 记 unknown、标 partial；thinking 无声明同样标 partial；模型 id 保留原样（只剥 custom: 前缀与方括号），无模型时给 claude/gpt/gemini/grok-unknown 占位——绝不借用具体模型的费率 |
 | Pi family spend 源（Pi/omp/Senpi/Kimchi） | 一个解析器四种身份：四桶独立 usage + totalTokens 只作 unclassified 余量载体；reasoning 文档化为 output 子集从不二次相加；fork 副本用**会话无关身份**（responseId 优先）折叠到原版，Kimchi 用 session-scoped 命名空间保持两会话独立；Senpi 发现 OmO 项目子树并把 session_info.name 当标题；无 header/时间/模型的行标 partial |
 | PrimeAgent spend 源 | Pi RLM 格式 + 父子对账：parent 的 aggregateUsage 已含子调用、child_usage_attributed 声明明细，子 transcript 也被独立扫描——**parent 自身 tally 恰等于 aggregate 的那条被减去准确的 child 用量**（钳制到零）；找不到子会话时 parent 保留聚合（保守可查）；attribution id 按 fork-lineage 根配对，parentSession 环取最小路径（确定性而非遍历序） |
@@ -75,7 +76,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 27 类数据源 | 首批 27 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 26 类数据源 | 首批 28 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
