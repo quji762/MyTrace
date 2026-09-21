@@ -66,6 +66,7 @@
 | RooCode/KiloCode/Cline spend 源 | VS Code task log（ui_messages.json）：只计 `api_req_started` 项，四种 token 在 text 字段里嵌套 JSON；modelInfo 优先、conversation history 的最后 `<model>` 标签兜底、`<slug>`/`<name>` 作 agent 名；ts=0 与不可解析时间戳跳过；三编辑器布局（Code/Insiders/VSCodium）+ .config + .vscode-server 均被探测 |
 | Hindsight spend 源 | 自托管记忆服务 llm-requests 的 JSONL 镜像（滚动窗口的持久副本，读账本不读服务）：用户编辑的文件不可信——不解码/无 id/无 started_at/total≤0/无 input 且无 output 的行跳过；cached_tokens 是 cache-read 桶、cache write 不报、reasoning 不分出；bank 是 project、operation/scope 组成标题 |
 | Mcode spend 源（MiniMax Code headless 流捕获） | usage 按 turnId 缓冲，直到 exec.result 供应模型才发出（无模型的流不可用，绝不猜）；消息只按自身 id 合并（流式重述替换原条目），无 id 则每行独立；裸 totalTokens 记 unclassified；BOM 与单行坏字节不丢其余捕获 |
+| Zed spend 源 | threads.db 的 threads 表（每行 data 是线程 JSON）：仅 model.provider==zed.dev 计数（外部 ACP agent 的线程在其来源处已计，不双计）；request_token_usage 逐项求和、cumulative 仅在 request 为空时使用；每线程一条 isAggregate 记录；imported 线程跳过；负数钳零；created_at→updated_at→payload 时间链 |
 | Mcode spend 源（续） | CopilotLogReader 组合入口：三 lane 固定顺序收集（OTEL→desktop→VS Code），后 lane 对前 lane 过滤（OTEL 命名的会话从 desktop 丢弃；VS Code 按 dedup key 或 会话+时刻 对过滤）；desktop 行是 LIFETIME 权威——lifetime 大于 OTEL 时 OTEL 记录标 partial（不发明余量）；无 total 声明的 reasoning 的疑虑也随之携带；totals 饱和不陷阱 |
 | Trae spend 源 | usage API 的 JSON 数组导出：Auto 模式行归 trae-&lt;mode&gt;（真实逐轮模型不可恢复）、已知名映射到 provider id（Claude Sonnet 4.5→claude-sonnet-4-5 等）、未知名原样透传计为 unpriced；**同页等值行不合并**（可能是两次请求）、**跨页按内容多重集对账**（{A}+{A,B}→A 和 B）、共享区域标 partial、字节相同页直接折叠 |
 | Cursor captured spend 源 | get-filtered-usage-events 导出 + 旧 CSV：**形状被证明而非从文件名假设**（JSON 需 usageEventsDisplay、CSV 需列名齐全、usage.backup 排除）；按 account scope 分组对账（原生 usage.&lt;account&gt; 名声明账户、任意导入共享一个 scope）、JSON lane 在其日期范围内权威（范围内 CSV 行不追加、账户标 partial）；**会话只在导出命名时存在**（conversationId / Cloud Agent ID）；成本（chargedCents/totalCents）不读作 token |
@@ -86,7 +87,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 16 类数据源 | 首批 38 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 15 类数据源 | 首批 39 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
