@@ -355,18 +355,25 @@ public static class CopilotDesktopReader
             CreatedAt: reader.IsDBNull(7) ? null : FlexibleText(reader.GetString(7)));
     }
 
-    private static HashSet<string> ColumnsOf(SqliteConnection connection, string table)
+    /// <summary>The table's columns in declared (cid) order. A List, not a
+    /// HashSet: the SELECT that consumes it must map columns to fixed ordinals,
+    /// which a HashSet's iteration order cannot guarantee.</summary>
+    private static List<string> ColumnsOf(SqliteConnection connection, string table)
     {
-        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var columns = new List<string>();
         try
         {
             using var command = connection.CreateCommand();
             command.CommandText = $"PRAGMA table_info({table})";
             using var reader = command.ExecuteReader();
+            var rows = new List<(long Cid, string Name)>();
             while (reader.Read())
             {
-                if (!reader.IsDBNull(1)) columns.Add(reader.GetString(1));
+                if (!reader.IsDBNull(1))
+                    rows.Add((reader.GetInt64(0), reader.GetString(1)));
             }
+            foreach (var (_, name) in rows.OrderBy(r => r.Cid))
+                columns.Add(name);
         }
         catch (SqliteException) { }
         return columns;
