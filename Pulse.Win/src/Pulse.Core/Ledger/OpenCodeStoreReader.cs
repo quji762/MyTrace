@@ -53,6 +53,9 @@ public enum TranscriptKind
     Reasonix,
     Augment,
     Warp,
+    DevinCli,
+    Grok,
+    KimiCli,
 }
 
 public static partial class TranscriptLocator
