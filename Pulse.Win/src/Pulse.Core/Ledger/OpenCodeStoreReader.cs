@@ -34,6 +34,22 @@ public enum TranscriptKind
     Fx,
     OpenClaw,
     Droid,
+    Pi,
+    PrimeAgent,
+    RooCode,
+    Codebuddy,
+    OpenCodeReview,
+    CommandCode,
+    Hindsight,
+    Mcode,
+    Trae,
+    CopilotCombined,
+    CursorCaptured,
+    AntigravityCaptured,
+    LmStudio,
+    Zed,
+    Hermes,
+    Micode,
 }
 
 public static partial class TranscriptLocator

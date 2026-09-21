@@ -73,6 +73,7 @@
 | Cursor captured spend 源 | get-filtered-usage-events 导出 + 旧 CSV：**形状被证明而非从文件名假设**（JSON 需 usageEventsDisplay、CSV 需列名齐全、usage.backup 排除）；按 account scope 分组对账（原生 usage.&lt;account&gt; 名声明账户、任意导入共享一个 scope）、JSON lane 在其日期范围内权威（范围内 CSV 行不追加、账户标 partial）；**会话只在导出命名时存在**（conversationId / Cloud Agent ID）；成本（chargedCents/totalCents）不读作 token |
 | Antigravity IDE captured spend 源 | 语言服务器用量的 JSONL 缓存（认证同步产物，读缓存而非服务器）：session_meta 供给回退模型、**model_placeholder_ 占位 id 跳过**（无可解析的价键）、负数钳制零（格式声明了每个桶，缺即真零）、全零行丢弃；reasoning 与 output 并列无声明→保持 output、标 partial；responseId 是跨同步的折叠身份 |
 | LM Studio spend 源 | server-logs/*.log 的 pretty-printed OpenAI 兼容输出（非逐行 JSON）：扫描平衡的 `"usage": {…}` 块并读取块前的 id/model/本地日志时间戳；**时间戳只来自日志行自身**（无本地前缀的块跳过，不用 mtime 或时钟填充）；prompt 含缓存、completion 含 reasoning——cache 读写钳到 prompt、fresh input = total − 已计各项、reasoning 保留在 output 内不二次处理；本地推理无金钱，不读成本；FNV-1a 散写无 id 块的稳定身份 |
+| MiMo Code (Micode) spend 源 | OpenCode 形状的 mimocode*.db（XDG 数据目录 + Orca hook 共享副本并集）：assistant 消息的 modelID/tokens.{input,output,reasoning,cache{read,write}}，reasoning 是真实字段折入 output 一次；**两种 epoch 都容忍**（现行毫秒、旧版秒）；store 自带 cost 忽略（Pulse 用自己的 ModelPrices，避免第二个不同来源的数字）；嵌入 id 是产品自身身份**不按数据库命名空间化**（XDG 与 Orca 两份折叠为一条），无 id 回落 row id + 数据库路径 |
 | OpenCodeReview spend 源 | session JSONL 的 llm_response：持久化 usage 无 total 也无 provider 路径记录，裸求和可能双计——store 自带的 total（变体携带时）是唯一权威（=disjoint→四类独立；=prompt+completion→cache 在 prompt 内相减；都不匹配→整 total 记 unclassified 而非猜测拆分）；**无 total 且有正 cache→不可证明，整条不发出**，余下可读记录标 partial；uuid 折叠重放、无 uuid 用文件内容摘要+行位置；duration 把时间锚定到请求开始 |
 | CapturedCSV 基础层 | RFC 4180 记录读取器（legacy Cursor cache 的前置）：引号字段含逗号与双写引号、三种换行、BOM 剥离、无尾随换行的末记录保留、未终止引号跑到文件尾——**只产字段行不是 schema**，表头/数值/空白的解释归调用者 |
 | CommandCode spend 源（transcript 侧） | projects/<slug>/ 的 JSONL 树：每条目命名 parentId，/rewind 移动叶子但**被放弃回复的用量保留在盘上**（回退上下文不退还已消耗的 token）——每个分支的回复都计数；消息身份折叠重放、祖先链只解析回复所用模型（**另一分支的模型变更不能改价**，记忆化保持长分支线性）；legacy 扁平格式无 usage 即无估算（字符数不是报告的 token）；checkpoints 文件排除 |
@@ -88,7 +89,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 14 类数据源 | 首批 40 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 13 类数据源 | 首批 41 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |

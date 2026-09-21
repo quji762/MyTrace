@@ -66,6 +66,13 @@ public static class VsCodeTaskLogReader
         return records;
     }
 
+    /// <summary>Every client's records in one list; the three extension ids
+    /// share no identity, so their results are concatenated rather than
+    /// reconciled.</summary>
+    public static IReadOnlyList<AgentUsageRecord> AllClients(string? userProfile = null) =>
+        ExtensionIDs.Keys.OrderBy(k => k, StringComparer.Ordinal)
+            .SelectMany(client => Records(client, userProfile)).ToList();
+
     public static IReadOnlyList<AgentUsageRecord> RecordsFromRoots(IEnumerable<string> roots)
     {
         var tasks = new Dictionary<string, (string? Messages, string? History)>();

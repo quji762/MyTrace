@@ -65,6 +65,23 @@ public partial class TokenSpendWindow : Window
             : DroidTab.IsChecked == true ? TranscriptKind.Droid
             : MuxTab.IsChecked == true ? TranscriptKind.Mux
             : GjcTab.IsChecked == true ? TranscriptKind.Gjc
+            : PiTab.IsChecked == true ? TranscriptKind.Pi
+            : PrimeTab.IsChecked == true ? TranscriptKind.PrimeAgent
+            : RooCodeTab.IsChecked == true ? TranscriptKind.RooCode
+            : BuddyTab.IsChecked == true ? TranscriptKind.Codebuddy
+            : HermesTab.IsChecked == true ? TranscriptKind.Hermes
+            : ZedTab.IsChecked == true ? TranscriptKind.Zed
+            : LmStudioTab.IsChecked == true ? TranscriptKind.LmStudio
+            : MicodeTab.IsChecked == true ? TranscriptKind.Micode
+            : OpenCodeReviewTab.IsChecked == true ? TranscriptKind.OpenCodeReview
+            : CommandCodeTab.IsChecked == true ? TranscriptKind.CommandCode
+            : CrushTab.IsChecked == true ? TranscriptKind.Crush
+            : HindsightTab.IsChecked == true ? TranscriptKind.Hindsight
+            : McodeTab.IsChecked == true ? TranscriptKind.Mcode
+            : TraeTab.IsChecked == true ? TranscriptKind.Trae
+            : CopilotLogTab.IsChecked == true ? TranscriptKind.CopilotCombined
+            : CursorTab.IsChecked == true ? TranscriptKind.CursorCaptured
+            : AntigravityTab.IsChecked == true ? TranscriptKind.AntigravityCaptured
             : TranscriptKind.ClaudeCode;
         Refresh();
     }
@@ -73,7 +90,7 @@ public partial class TokenSpendWindow : Window
 
     private void Refresh()
     {
-        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff or TranscriptKind.Mux or TranscriptKind.Gjc)
+        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff or TranscriptKind.Mux or TranscriptKind.Gjc or TranscriptKind.Pi or TranscriptKind.PrimeAgent or TranscriptKind.RooCode or TranscriptKind.Codebuddy or TranscriptKind.Hermes or TranscriptKind.Zed or TranscriptKind.LmStudio or TranscriptKind.Micode or TranscriptKind.OpenCodeReview or TranscriptKind.CommandCode or TranscriptKind.Crush or TranscriptKind.Hindsight or TranscriptKind.Mcode or TranscriptKind.Trae or TranscriptKind.CopilotCombined or TranscriptKind.CursorCaptured or TranscriptKind.AntigravityCaptured)
         {
             RenderRecordBased(_kind);
             return;
@@ -129,6 +146,26 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Droid => DroidSessionReader.Records(),
             TranscriptKind.Mux => MuxUsageReader.Records(),
             TranscriptKind.Gjc => GjcUsageReader.Records(),
+            TranscriptKind.Pi => PiFamilySessionReader.Records("pi"),
+            TranscriptKind.PrimeAgent => PrimeAgentSessionReader.Records(
+                new[] { Path.Combine(_vsCodeHome, ".prime", "agent", "sessions"),
+                        Path.Combine(_vsCodeHome, ".prime", "agent", "session-artifacts") }),
+            TranscriptKind.RooCode => VsCodeTaskLogReader.AllClients(_vsCodeHome),
+            TranscriptKind.Codebuddy => new[] { "codebuddy", "workbuddy" }
+                .SelectMany(client => TencentBuddyReader.Records(client, _vsCodeHome)).ToList(),
+            TranscriptKind.OpenCodeReview => OpenCodeReviewReader.Records(),
+            TranscriptKind.CommandCode => CommandCodeSpendReader.Records(),
+            TranscriptKind.Hindsight => CapturedHindsightReader.Records(),
+            TranscriptKind.Mcode => CapturedMcodeReader.Records(),
+            TranscriptKind.Trae => CapturedTraeReader.Records(),
+            TranscriptKind.CopilotCombined => CopilotLogReader.Records(),
+            TranscriptKind.CursorCaptured => CapturedCursorReader.Records(),
+            TranscriptKind.AntigravityCaptured => CapturedAntigravityReader.Records(),
+            TranscriptKind.LmStudio => LmStudioUsageReader.Records(),
+            TranscriptKind.Zed => ZedReader.Records(),
+            TranscriptKind.Hermes => HermesReader.Records(),
+            TranscriptKind.Micode => MicodeReader.Records(),
+            TranscriptKind.Crush => CrushReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),
         };
         var built = AgentUsageLedger.Build(records, _prices);
