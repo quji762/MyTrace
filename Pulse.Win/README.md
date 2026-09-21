@@ -69,6 +69,7 @@
 | Mcode spend 源（续） | CopilotLogReader 组合入口：三 lane 固定顺序收集（OTEL→desktop→VS Code），后 lane 对前 lane 过滤（OTEL 命名的会话从 desktop 丢弃；VS Code 按 dedup key 或 会话+时刻 对过滤）；desktop 行是 LIFETIME 权威——lifetime 大于 OTEL 时 OTEL 记录标 partial（不发明余量）；无 total 声明的 reasoning 的疑虑也随之携带；totals 饱和不陷阱 |
 | Trae spend 源 | usage API 的 JSON 数组导出：Auto 模式行归 trae-&lt;mode&gt;（真实逐轮模型不可恢复）、已知名映射到 provider id（Claude Sonnet 4.5→claude-sonnet-4-5 等）、未知名原样透传计为 unpriced；**同页等值行不合并**（可能是两次请求）、**跨页按内容多重集对账**（{A}+{A,B}→A 和 B）、共享区域标 partial、字节相同页直接折叠 |
 | OpenCodeReview spend 源 | session JSONL 的 llm_response：持久化 usage 无 total 也无 provider 路径记录，裸求和可能双计——store 自带的 total（变体携带时）是唯一权威（=disjoint→四类独立；=prompt+completion→cache 在 prompt 内相减；都不匹配→整 total 记 unclassified 而非猜测拆分）；**无 total 且有正 cache→不可证明，整条不发出**，余下可读记录标 partial；uuid 折叠重放、无 uuid 用文件内容摘要+行位置；duration 把时间锚定到请求开始 |
+| CapturedCSV 基础层 | RFC 4180 记录读取器（legacy Cursor cache 的前置）：引号字段含逗号与双写引号、三种换行、BOM 剥离、无尾随换行的末记录保留、未终止引号跑到文件尾——**只产字段行不是 schema**，表头/数值/空白的解释归调用者 |
 | CommandCode spend 源（transcript 侧） | projects/<slug>/ 的 JSONL 树：每条目命名 parentId，/rewind 移动叶子但**被放弃回复的用量保留在盘上**（回退上下文不退还已消耗的 token）——每个分支的回复都计数；消息身份折叠重放、祖先链只解析回复所用模型（**另一分支的模型变更不能改价**，记忆化保持长分支线性）；legacy 扁平格式无 usage 即无估算（字符数不是报告的 token）；checkpoints 文件排除 |
 | CodeBuddy/WorkBuddy spend 源 | 三形状按文件分派：JSONL transcript（唯一可对账通道，messageId/traceId 折叠镜像写入、更完整快照胜出、非 completed 状态不计）、扩展日志（[AgentReporter]/[CraftInvokableAgent]，naive 本地时间戳即时间本身）、WorkBuddy SQLite（每会话一条聚合，记 unclassified 不冒充 input）。**transcript 存在时 fallback 不追加**（共享不了身份会双计）→ transcript 标 partial；log 的无身份行独立计数（按时间折叠会丢真实请求） |
 | Droid spend 源 | settings.json 的**会话累计总量**（单条 isAggregate 记录，不拆到回复）：totalTokenCount 是唯一权威——对四种候选恒等式（reasoning 并入/独立 × cache 含入/并列）逐一求和验证，恰匹配一种才落地；都不匹配→整 total 记 unclassified（总数完整、只是种类未知，isPartial=false）；无 total 且有正 cache→output 保留、input 记 unknown、标 partial；thinking 无声明同样标 partial；模型 id 保留原样（只剥 custom: 前缀与方括号），无模型时给 claude/gpt/gemini/grok-unknown 占位——绝不借用具体模型的费率 |
@@ -82,7 +83,7 @@
 |---|---|---|
 | Token Spend 后续数据源 | 首批 2 类（Claude Code / Codex 本地 transcript）已实现；其余 52 类为各工具各自的数据存储解析 | 按上游 1.x 节奏逐步补充 |
 | Status line/Desktop 会话路由 | Claude Code 的 status-line hook 与 Desktop cookie fallback 为 macOS 集成 | Windows 需等价物或永久缺省（endpoint 路由已可用） |
-| Token Spend 其余 20 类数据源 | 首批 34 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
+| Token Spend 其余 19 类数据源 | 首批 35 类已实现（Claude/Codex transcript + OpenCode/Kilo store + CherryStudio 流式去重 + Cline CLI store + Amp thread 对账）+ 历史面板；Warp 快照只报请求数与金额、无 token（上游同一裁定：不发明数字）；其余为各工具独立存储的解析 | 按上游 1.x 节奏逐步补充 |
 | Per-Monitor DPI 完整矩阵 | WM_DPICHANGED 钩子已挂；混合 DPI 实机矩阵未验证 | 需多屏硬件 |
 | winget manifest | 草稿已入库（packaging/winget），sha256 由发布流水线盖章后提交 | 打包链已就绪 |
 | 代码签名证书 | 流水线支持，证书由发布者提供 | 商业发布所需 |
