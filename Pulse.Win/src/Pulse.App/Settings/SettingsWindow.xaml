@@ -80,6 +80,27 @@
                     <CheckBox x:Name="StartupToggle" Content="Launch Pulse at startup"
                               Foreground="#FFF2F2F2" Checked="OnStartupToggled" Unchecked="OnStartupToggled" />
                 </Border>
+
+                <Border Background="#FF2A2A2A" CornerRadius="6" Padding="10" Margin="0,8,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Claude Code status line" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="#FFF2F2F2" />
+                                <TextBlock x:Name="StatusLineSummary" Text="" FontSize="10"
+                                           Foreground="#FF9E9E9E" Margin="0,2,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button x:Name="StatusLineButton" Grid.Column="1" Content="Enable" Padding="10,4"
+                                    VerticalAlignment="Center" Click="OnStatusLineToggle" />
+                        </Grid>
+                        <TextBlock Text="Shows Pulse's per-account context usage inside Claude Code. Your existing status line is remembered and restored on disable."
+                                   FontSize="10" Foreground="#FF9E9E9E" Margin="0,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 

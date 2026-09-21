@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Pulse.Auth;
 using Pulse.Core.Accounts;
+using Pulse.Core.ClaudeHook;
 using Pulse.Core.Platform;
 using Pulse.Core.Providers;
 
@@ -42,6 +43,7 @@ public partial class SettingsWindow : Window
         StartupToggle.IsChecked = _launchAtStartup;
 
         Reload();
+        ReloadStatusLine();
     }
 
     private void Reload()
@@ -167,6 +169,38 @@ public partial class SettingsWindow : Window
         if (StartupToggle is not null)
             _launchAtStartup = StartupToggle.IsChecked == true;
     }
+
+    // --- Claude Code status line -------------------------------------------
+
+    private void ReloadStatusLine()
+    {
+        var installed = StatusLineInstaller.IsInstalled();
+        StatusLineButton.Content = installed ? "Disable" : "Enable";
+        StatusLineSummary.Text = installed
+            ? "Enabled — Claude Code pipes each response's usage to Pulse."
+            : "Not installed.";
+    }
+
+    private void OnStatusLineToggle(object sender, RoutedEventArgs e)
+    {
+        // An unreadable settings.json must never be replaced wholesale; both
+        // paths refuse and say so rather than clobber the user's settings.
+        var ok = StatusLineInstaller.IsInstalled()
+            ? StatusLineInstaller.Uninstall()
+            : StatusLineInstaller.Install(ExecutablePath());
+        if (!ok)
+        {
+            System.Windows.MessageBox.Show(this,
+                "Claude Code's settings.json exists but could not be parsed. It was left unchanged.",
+                "Pulse", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        ReloadStatusLine();
+    }
+
+    /// <summary>This executable, quoted for the hook command line.</summary>
+    private static string ExecutablePath() =>
+        Environment.ProcessPath
+        ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
