@@ -66,7 +66,11 @@
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
                 <RadioButton x:Name="MuxTab" Content="Mux" GroupName="spend" Margin="0,0,8,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="GjcTab" Content="GJC" GroupName="spend" Margin="0,0,16,0"
+                <RadioButton x:Name="GjcTab" Content="GJC" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="PiTab" Content="Pi" GroupName="spend" Margin="0,0,8,0"
+                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
+                <RadioButton x:Name="PrimeTab" Content="Prime Agent" GroupName="spend" Margin="0,0,16,0"
                              Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
             </StackPanel>
             <Button Grid.Column="1" Content="Refresh" Padding="12,4" Click="OnRefresh" />
