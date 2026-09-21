@@ -22,7 +22,7 @@ public partial class TokenSpendWindow : Window
 {
     private readonly TranscriptScanner _scanner;
     private readonly string? _vsCodeHome;
-    private readonly ModelPrices _prices;
+    private ModelPrices? _prices;
     private TranscriptKind _kind = TranscriptKind.ClaudeCode;
     private UsageLedger _ledger = UsageLedger.EmptyLedger;
     private IReadOnlyDictionary<string, ScannedTranscript> _files =
@@ -34,10 +34,38 @@ public partial class TokenSpendWindow : Window
     {
         InitializeComponent();
         _scanner = scanner ?? new TranscriptScanner();
-        _prices = prices ?? ModelPrices.Empty;
+        _prices = prices;
         _vsCodeHome = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         ClaudeTab.IsChecked = true;
+        if (_prices is null) _ = LoadPricesAsync();
     }
+
+    /// <summary>The plan vendor to fall back to for a model no first-party
+    /// provider publishes; the plan the tokens were bought on is the last
+    /// word, never the first.</summary>
+    private static string? PriceVendor(TranscriptKind kind) => kind switch
+    {
+        TranscriptKind.OpenCode or TranscriptKind.OpenCodeReview => "opencode-go",
+        TranscriptKind.Cline => "cline-pass",
+        _ => null,
+    };
+
+    /// <summary>Fetch the live price list once; until it lands (or fails) the
+    /// pane shows tokens with every model unpriced, which is the honest empty
+    /// state. A later tab switch prices with whatever arrived.</summary>
+    private async Task LoadPricesAsync()
+    {
+        try
+        {
+            var table = await ModelPriceCatalog.LoadAsync().ConfigureAwait(true);
+            if (table.Count == 0) return;
+            _prices = new CatalogModelPrices(table, PriceVendor(_kind));
+            if (IsActiveTab) Refresh();
+        }
+        catch (Exception) { }
+    }
+
+    private bool IsActiveTab => IsLoaded;
 
     private void OnProviderTabChanged(object sender, RoutedEventArgs e)
     {
@@ -104,12 +132,12 @@ public partial class TokenSpendWindow : Window
                 SearchOption.AllDirectories).FirstOrDefault() is { } found ? found : null;
             _ledger = store is null
                 ? UsageLedger.EmptyLedger
-                : OpenCodeStoreReader.LedgerAt(store, _prices);
+                : OpenCodeStoreReader.LedgerAt(store, _prices ?? ModelPrices.Empty);
             _files = new Dictionary<string, ScannedTranscript>();
         }
         else
         {
-            var result = _scanner.Scan(_kind, _prices, refresh: true);
+            var result = _scanner.Scan(_kind, _prices ?? ModelPrices.Empty, refresh: true);
             _ledger = result.Ledger;
             _files = result.Files;
         }
@@ -168,7 +196,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Crush => CrushReader.Records(),
             _ => Array.Empty<AgentUsageRecord>(),
         };
-        var built = AgentUsageLedger.Build(records, _prices);
+        var built = AgentUsageLedger.Build(records, _prices ?? ModelPrices.Empty);
         _ledger = built.Ledger;
         SessionList.ItemsSource = built.Sessions
             .Select(s => new SessionRow

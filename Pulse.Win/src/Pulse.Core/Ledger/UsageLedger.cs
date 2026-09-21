@@ -65,7 +65,7 @@ public sealed record ModelPrice(
     double Output);
 
 /// <summary>The price list; deterministic fallback when no published price exists.</summary>
-public sealed class ModelPrices
+public class ModelPrices
 {
     private readonly IReadOnlyDictionary<string, ModelPrice> _prices;
 
@@ -78,8 +78,10 @@ public sealed class ModelPrices
     /// Several raw ids can resolve to one display name; the lookup tries the id
     /// first and then any name the price list carries for it.
     /// </summary>
-    public ModelPrice? PriceFor(string modelId) =>
+    public virtual ModelPrice? PriceFor(string modelId) =>
         _prices.GetValueOrDefault(modelId);
+
+    public IReadOnlyDictionary<string, ModelPrice> Table => _prices;
 
     public static ModelPrices Empty { get; } = new();
 }
