@@ -18,7 +18,14 @@ namespace Pulse.Providers.Antigravity;
 /// %LOCALAPPDATA%\Programs\Antigravity (app and IDE), the CSRF token still comes
 /// off the command line (`--csrf_token`), and ports are read from the process's
 /// bound TCP listeners via .NET's own tables rather than lsof.
+///
+/// **Multi-account** is a second *connection*, not a second OAuth login: the
+/// Google token under `~/.gemini` cannot report real quota (all-100% placeholder),
+/// so an added account stores ports + CSRF of another running language server
+/// (another Windows session, a second install). Primary keeps process discovery;
+/// added slots never borrow it.
 /// </summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class AntigravityProvider : IUsageProvider
 {
     // Codeium's language server, hence the `exa.` package and the `x-codeium-` header.
@@ -26,18 +33,24 @@ public sealed class AntigravityProvider : IUsageProvider
     private const string StatusMethod = "exa.language_server_pb.LanguageServerService/GetUserStatus";
     public const string CsrfHeader = "x-codeium-csrf-token";
 
+    private readonly Func<string?, string?> _credentialResolver;
+
+    public AntigravityProvider(Func<string?, string?>? credentialResolver = null)
+    {
+        _credentialResolver = credentialResolver ?? (_ => null);
+    }
+
     public ProviderId Id => ProviderId.Antigravity;
     public ProviderCapabilities Capabilities => ProviderCapabilities.For(ProviderId.Antigravity);
 
     public async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
-        var servers = AntigravityDiscovery.LocateServers();
+        var servers = ServersFor(account);
         if (servers.Count == 0)
             return ProviderReadResult.Failed(ProviderReadHealth.UnsupportedPlatform, "antigravity not running");
 
         var answeredEmpty = false;
-        var somethingAnswered = false;
 
         foreach (var server in servers)
         {
@@ -63,14 +76,9 @@ public sealed class AntigravityProvider : IUsageProvider
                             UsageState.Live, plan, null, null, UsageRoute.LanguageServer));
                     }
                     answeredEmpty = true;
-                    somethingAnswered = true;
                 }
-                else
-                {
-                    // A 401 from the IDE's other server is "not me", worth no
-                    // more than a closed port; keep looking.
-                    somethingAnswered = true;
-                }
+                // A 401 from the IDE's other server is "not me", worth no more
+                // than a closed port; keep looking.
             }
         }
 
@@ -78,9 +86,63 @@ public sealed class AntigravityProvider : IUsageProvider
             answeredEmpty ? ProviderReadHealth.SchemaChanged : ProviderReadHealth.UnsupportedPlatform,
             answeredEmpty ? "no limits reported" : "antigravity not answering");
     }
+
+    /// <summary>Primary discovers local processes; an added slot uses only its
+    /// stored connection so it can never be painted with the primary login.</summary>
+    private List<AntigravityDiscovery.Server> ServersFor(MonitoredAccount account)
+    {
+        if (!Internal.AccountScope.IsPrimary(account))
+        {
+            var secret = _credentialResolver(account.AccountId);
+            return AntigravityConnection.Parse(secret) is { } connection
+                ? new List<AntigravityDiscovery.Server> { new(connection.Ports, connection.Token) }
+                : new List<AntigravityDiscovery.Server>();
+        }
+        return AntigravityDiscovery.LocateServers();
+    }
+}
+
+/// <summary>The stored form of an added Antigravity account: which language-server
+/// ports to ask and the CSRF token those ports accept. JSON so a second port list
+/// survives round-tripping; blank or malformed input parses as absent.</summary>
+public sealed record AntigravityConnection(IReadOnlyList<int> Ports, string Token)
+{
+    public string Serialize() => System.Text.Json.JsonSerializer.Serialize(
+        new { ports = Ports, token = Token });
+
+    public static AntigravityConnection? Parse(string? secret)
+    {
+        if (string.IsNullOrWhiteSpace(secret)) return null;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(secret);
+            var root = document.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("token", out var tokenValue) || tokenValue.ValueKind != System.Text.Json.JsonValueKind.String)
+                return null;
+            var token = tokenValue.GetString();
+            if (string.IsNullOrWhiteSpace(token)) return null;
+
+            var ports = new List<int>();
+            if (root.TryGetProperty("ports", out var portsValue) && portsValue.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in portsValue.EnumerateArray())
+                {
+                    if (item.ValueKind == System.Text.Json.JsonValueKind.Number && item.TryGetInt32(out var port) && port is > 0 and < 65536)
+                        ports.Add(port);
+                }
+            }
+            return ports.Count == 0 ? null : new AntigravityConnection(ports, token!);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>Process + port + CSRF discovery on Windows.</summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public static class AntigravityDiscovery
 {
     public sealed record Server(IReadOnlyList<int> Ports, string Token);
@@ -136,12 +198,16 @@ public static class AntigravityDiscovery
             // so the lightweight route is `wmic`-free P/Invoke via GetCommandLine
             // is per-process only — use the CLSID route through .NET: the simplest
             // honest option is a WMI query.
-            var searcher = new System.Management.ManagementObjectSearcher(
+            using var searcher = new System.Management.ManagementObjectSearcher(
                 $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {process.Id}");
-            foreach (var item in searcher.Get())
+            using var found = searcher.Get();
+            foreach (System.Management.ManagementBaseObject item in found)
             {
-                var value = item["CommandLine"] as string;
-                return value;
+                using (item)
+                {
+                    var value = item["CommandLine"] as string;
+                    return value;
+                }
             }
             return null;
         }
@@ -210,7 +276,14 @@ public static class AntigravityDiscovery
                 SslOptions = new SslClientAuthenticationOptions
                 {
                     RemoteCertificateValidationCallback = (_, _, _, errors) =>
-                        errors == SslPolicyErrors.None || true, // loopback self-signed; host pinning below
+                    {
+                        // The request URL is hardcoded to https://127.0.0.1:<port>.
+                        // language_server uses a self-signed cert; accept chain or
+                        // name mismatches for that loopback endpoint only — never
+                        // a missing certificate.
+                        return errors is SslPolicyErrors.None
+                            or SslPolicyErrors.RemoteCertificateChainErrors;
+                    },
                 },
             };
             using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
@@ -222,7 +295,8 @@ public static class AntigravityDiscovery
             if (!response.IsSuccessStatusCode) return null;
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            return JsonDocument.Parse(body).RootElement.Clone();
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.Clone();
         }
         catch (Exception)
         {

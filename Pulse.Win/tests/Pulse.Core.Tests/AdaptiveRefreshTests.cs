@@ -39,4 +39,32 @@ public class AdaptiveRefreshTests
         var interval = AdaptiveRefresh.NextInterval(AdaptiveRefresh.Floor, constrained);
         Assert.True(interval >= TimeSpan.FromMinutes(15));
     }
+
+    [Fact]
+    public void Visible_And_Idle_Waits_The_Ceiling()
+    {
+        var signals = new AdaptiveRefresh.Signals { PanelVisible = true };
+        var interval = AdaptiveRefresh.NextInterval(AdaptiveRefresh.Floor, signals);
+        Assert.Equal(AdaptiveRefresh.Ceiling, interval);
+    }
+
+    [Fact]
+    public void Visible_Idle_Balance_Provider_Waits_Five_Minutes()
+    {
+        var signals = new AdaptiveRefresh.Signals { PanelVisible = true, LocallyUnobservable = true };
+        var interval = AdaptiveRefresh.NextInterval(AdaptiveRefresh.Floor, signals);
+        Assert.Equal(AdaptiveRefresh.UnwatchedCeiling, interval);
+    }
+
+    [Fact]
+    public void Recent_Activity_Returns_To_The_Floor()
+    {
+        var signals = new AdaptiveRefresh.Signals
+        {
+            PanelVisible = true,
+            LastLocalActivity = DateTimeOffset.UtcNow.AddMinutes(-1),
+        };
+        var interval = AdaptiveRefresh.NextInterval(TimeSpan.FromMinutes(30), signals);
+        Assert.Equal(AdaptiveRefresh.Floor, interval);
+    }
 }

@@ -102,14 +102,14 @@ public sealed class TranscriptScanner
     public sealed record ScanResult(UsageLedger Ledger, IReadOnlyDictionary<string, ScannedTranscript> Files);
 
     /// <summary>Scan (or re-use cached file entries) and price. `refresh` forces a re-read.</summary>
-    public ScanResult Scan(TranscriptKind kind, ModelPrices prices, bool refresh = false)
+    public ScanResult Scan(TranscriptKind kind, ModelPrices prices, bool refresh = false, string? userProfile = null)
     {
         lock (_lock)
         {
             var root = kind switch
             {
-                TranscriptKind.ClaudeCode => TranscriptLocator.ClaudeRoot(),
-                TranscriptKind.Codex => TranscriptLocator.CodexRoot(),
+                TranscriptKind.ClaudeCode => TranscriptLocator.ClaudeRoot(userProfile),
+                TranscriptKind.Codex => TranscriptLocator.CodexRoot(userProfile),
                 _ => null,
             };
 

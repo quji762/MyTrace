@@ -22,6 +22,8 @@
     <ProjectReference Include="..\..\src\Pulse.Core\Pulse.Core.csproj" />
     <ProjectReference Include="..\..\src\Pulse.Diagnostics\Pulse.Diagnostics.csproj" />
     <ProjectReference Include="..\..\src\Pulse.Auth\Pulse.Auth.csproj" />
+    <ProjectReference Include="..\..\src\Pulse.Providers\Pulse.Providers.csproj" />
+    <ProjectReference Include="..\..\src\Pulse.Storage\Pulse.Storage.csproj" />
   </ItemGroup>
 
 </Project>

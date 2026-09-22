@@ -26,8 +26,8 @@ public static class CodebuffUsageReader
 {
     private static readonly string[] InputAliases = ["inputTokens", "input_tokens", "promptTokens", "prompt_tokens"];
     private static readonly string[] OutputAliases = ["outputTokens", "output_tokens", "completionTokens", "completion_tokens"];
-    private static readonly string[] CacheReadAliases = ["cacheReadInputTokens", "cache_read_input_tokens", "cachedTokensCreated", "cached_tokens_created"];
-    private static readonly string[] CacheWriteAliases = ["cacheCreationInputTokens", "cache_creation_input_tokens", "cacheCreationTokens", "cache_creation_tokens"];
+    private static readonly string[] CacheReadAliases = ["cacheReadInputTokens", "cache_read_input_tokens"];
+    private static readonly string[] CacheWriteAliases = ["cacheCreationInputTokens", "cache_creation_input_tokens", "cacheCreationTokens", "cache_creation_tokens", "cachedTokensCreated", "cached_tokens_created"];
 
     public static IReadOnlyList<AgentUsageRecord> Records(string? userProfile = null)
     {
@@ -229,15 +229,15 @@ public static class CodebuffUsageReader
     /// project, and the config directory above it names the channel.</summary>
     public static (string Channel, string Project, string ChatId) Location(string file)
     {
-        var chatId = Path.GetFileName(Path.GetDirectoryName(file));
+        var chatId = Path.GetFileName(Path.GetDirectoryName(file)) ?? "";
         var components = file.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         var projectsIndex = Array.LastIndexOf(components, "projects");
         if (projectsIndex > 0 && projectsIndex + 1 < components.Length)
             return (components[projectsIndex - 1], components[projectsIndex + 1], chatId);
 
         var chatsDir = Path.GetDirectoryName(Path.GetDirectoryName(file));
-        var project = Path.GetFileName(chatsDir);
-        var channel = Path.GetFileName(Path.GetDirectoryName(chatsDir));
+        var project = Path.GetFileName(chatsDir) ?? "";
+        var channel = Path.GetFileName(Path.GetDirectoryName(chatsDir)) ?? "";
         return (channel, project, chatId);
     }
 

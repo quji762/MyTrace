@@ -31,7 +31,7 @@
 
 | 能力 | 状态 |
 |---|---|
-| 多账号管理 | Claude/Codex/Grok/GrokBot 四个 `supportsMultipleAccounts` Provider 均有设置页"Add account"，驱动各自主 OAuth 流程（OpenAI 设备码/xAI 设备码/Claude loopback）；slot 生成后永不复用，删除重加不继承身份；与 CLI 自身登录完全隔离 |
+| 多账号管理 | Claude/Codex/Grok/GrokBot（OAuth/网页）+ Antigravity（第二路 language server 连接：端口 + CSRF）均可 "Add account"；slot 生成后永不复用，删除重加不继承身份；与 CLI 自身登录完全隔离 |
 | Grok 设备码登录 | xAI RFC 8628 标准形（等待与拒绝都是 400，由 body error 区分）；`billing:read` 不请求（端点实测拒绝）；使用 xAI 自带的 verification_uri_complete |
 | Grok Bot Cursor 网页登录 | loginDeepControl + poll（404=未完成，403 才终止）；challenge=SHA-256(ENCODED verifier)；~60 天 token 无刷新端点 |
 | Token 刷新 | 旧 refresh token 前向保留；绝不触碰 CLI 自身存储 |
@@ -126,6 +126,7 @@ Pulse.Win/
 │  └─ Pulse.Storage/        DPAPI 凭据库 + Credential Manager
 ├─ tests/
 │  ├─ Pulse.Core.Tests/         归一化、缓存、刷新、预测、告警、OAuth、日志脱敏
+│  ├─ Pulse.App.Tests/          面板组合根、版本对齐、工作区与 spend 装配
 │  └─ Pulse.ProviderContract.Tests/  上游 fixtures 驱动的解析契约测试
 ```
 

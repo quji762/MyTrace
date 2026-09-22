@@ -16,4 +16,7 @@ public sealed record MonitoredAccount
     public bool IsBorrowed { get; init; } = true;
 
     public bool Enabled { get; init; } = true;
+
+    /// <summary>Primary Claude and Codex accounts can refuse the fallback route.</summary>
+    public Providers.RoutePin Pin { get; init; } = Providers.RoutePin.Automatic;
 }

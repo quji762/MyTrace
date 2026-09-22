@@ -65,4 +65,36 @@ public class ThresholdAlertsTests
 
         Assert.Equal([0.8, 0.8], fired);
     }
+
+    [Fact]
+    public void Separate_Windows_Do_Not_Rearm_Each_Other()
+    {
+        // A 5-hour window and a 7-day window share an account but not a reset.
+        // One key for both makes every refresh look like a new window and fires again.
+        var alerts = new ThresholdAlerts();
+        var fired = new List<double>();
+        alerts.ThresholdCrossed += (_, t) => fired.Add(t);
+
+        var fiveHour = Window(0.9, reset: Now.AddHours(2)) with { Id = "five" };
+        var sevenDay = Window(0.2, reset: Now.AddDays(4)) with { Id = "seven" };
+        var fiveKey = ThresholdAlerts.KeyFor(ProviderId.ClaudeCode, "ClaudeCode", fiveHour.Id);
+        var sevenKey = ThresholdAlerts.KeyFor(ProviderId.ClaudeCode, "ClaudeCode", sevenDay.Id);
+        Assert.NotEqual(fiveKey, sevenKey);
+
+        alerts.Observe(fiveKey, fiveHour, Now);
+        alerts.Observe(sevenKey, sevenDay, Now);
+        alerts.Observe(fiveKey, fiveHour, Now);
+
+        Assert.Equal([0.8], fired);
+    }
+
+    [Fact]
+    public void Off_Does_Not_Throw_Or_Fire()
+    {
+        var alerts = new ThresholdAlerts([]);
+        var fired = false;
+        alerts.ThresholdCrossed += (_, _) => fired = true;
+        alerts.Observe("k", Window(1, exhausted: true), Now);
+        Assert.False(fired);
+    }
 }

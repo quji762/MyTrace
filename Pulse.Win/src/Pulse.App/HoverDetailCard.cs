@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
+using System.Windows.Media;
+using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
+using FontFamily = System.Windows.Media.FontFamily;
 using Pulse.Core.Forecast;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
@@ -8,123 +11,255 @@ using Pulse.Core.Usage;
 namespace Pulse.App;
 
 /// <summary>
-/// Hover detail card: a non-activating popup listing ALL windows for a provider
-/// (the rail ring shows only the first), with plan, reset times, credit balance,
-/// and the burn-rate ETA when the data honestly supports one. Uses a WPF Popup
-/// with StaysOpen=false so clicking elsewhere dismisses it — no window activation
-/// (the rail must not steal focus; upstream hover cards behave the same way).
+/// The card that opens beside a ring. Same contents as the Mac card: the
+/// provider's name, then one bar per limit. The rail itself only carries the
+/// headline percent.
 /// </summary>
 public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
 {
-    private readonly TextBlock _content = new()
-    {
-        TextWrapping = TextWrapping.Wrap,
-        MaxWidth = 260,
-    };
+    private readonly Border _shell;
+    public event Action? PointerEntered;
+    public event Action? PointerLeft;
 
     public HoverDetailCard()
     {
         AllowsTransparency = true;
-        StaysOpen = false;
-        PlacementTarget = null;
-        Child = new System.Windows.Controls.Border
+        StaysOpen = true;
+        Placement = System.Windows.Controls.Primitives.PlacementMode.Left;
+        _shell = new Border
         {
-            Background = TryFind("RailBackground"),
-            CornerRadius = new System.Windows.CornerRadius(8),
-            Padding = new Thickness(12),
-            Child = _content,
+            Width = 250,
+            CornerRadius = new CornerRadius(20),
+            Padding = new Thickness(18),
+            Background = Brush("RailBackground", Color.FromRgb(0x14, 0x14, 0x14)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
-                BlurRadius = 12,
-                Opacity = 0.35,
-                ShadowDepth = 2,
+                BlurRadius = 24,
+                Opacity = 0.45,
+                ShadowDepth = 0,
             },
         };
+        _shell.MouseEnter += (_, _) => PointerEntered?.Invoke();
+        _shell.MouseLeave += (_, _) => PointerLeft?.Invoke();
+        Child = _shell;
     }
 
-    private static System.Windows.Media.Brush? TryFind(string key) =>
-        System.Windows.Application.Current?.TryFindResource(key) as System.Windows.Media.Brush;
-
-    /// <summary>Populate from a full reading and open beside the given ring.</summary>
-    public void ShowFor(ProviderUsage usage, UIElement placementTarget)
+    public void ShowFor(ProviderUsage usage, UIElement placementTarget, bool openToTheLeft, string? title = null)
     {
         PlacementTarget = placementTarget;
-        Placement = System.Windows.Controls.Primitives.PlacementMode.Right;
+        Placement = openToTheLeft
+            ? System.Windows.Controls.Primitives.PlacementMode.Left
+            : System.Windows.Controls.Primitives.PlacementMode.Right;
+        HorizontalOffset = openToTheLeft ? -8 : 8;
+        _shell.Child = Build(usage, title);
+        if (!placementTarget.IsVisible) return;
+        try
+        {
+            _shell.Opacity = 0;
+            IsOpen = true;
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(
+                1, TimeSpan.FromMilliseconds(DesignTokens.MotionQuick))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase
+                {
+                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut,
+                },
+            };
+            _shell.BeginAnimation(OpacityProperty, fade);
+        }
+        catch (InvalidOperationException) { }
+    }
 
-        _content.Inlines.Clear();
-        var lines = new List<System.Windows.Documents.Inline>();
+    /// <summary>The card body <see cref="ShowFor"/> just built.</summary>
+    public FrameworkElement? DetailRoot => _shell.Child as FrameworkElement;
 
-        if (usage.Plan is { } plan)
-            lines.Add(Header($"{plan}"));
+    private static UIElement Build(ProviderUsage usage, string? title = null)
+    {
+        var stack = new StackPanel();
+        var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        header.Children.Add(new GlyphView
+        {
+            Provider = usage.Provider,
+            Width = 16,
+            Height = 16,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        });
+        header.Children.Add(new TextBlock
+        {
+            Text = title is { Length: > 0 } ? Ui.UsageTitle(title) : Ui.UsageTitle(ProviderCatalog.DisplayName(usage.Provider)),
+            FontFamily = Face,
+            FontSize = DesignTokens.TypeTitle,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("RailForeground", Colors.White),
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        stack.Children.Add(header);
+        stack.Children.Add(new Border
+        {
+            Height = 1,
+            Margin = new Thickness(0, 12, 0, 0),
+            Background = Brush("Divider", Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF)),
+        });
+
+        if (usage.Windows.Count == 0)
+        {
+            stack.Children.Add(Note(Ui.NoReading, 0.55, new Thickness(0, 14, 0, 0)));
+        }
 
         foreach (var window in usage.Windows)
         {
-            var name = DescribeKind(window);
-            var line = new System.Windows.Documents.Run(
-                $"{name}: {Math.Round(window.UsedFraction * 100)}% used");
-            lines.Add(new System.Windows.Documents.Run(line.Text + "\n") { Foreground = ForegroundBrush() });
-
-            if (window.ResetsAt is { } reset)
-                lines.Add(new System.Windows.Documents.Run($"  resets {reset.ToLocalTime():MM-dd HH:mm}\n")
-                {
-                    Foreground = MutedBrush(),
-                    FontSize = 10,
-                });
-
-            if (BurnRate.For(window, DateTimeOffset.Now) is { } estimate &&
-                estimate.TimeToExhausted is { } eta &&
-                eta > TimeSpan.Zero)
-            {
-                lines.Add(new System.Windows.Documents.Run(
-                    $"  ~{Math.Floor(eta.TotalMinutes)} min to exhausted at this pace\n")
-                {
-                    Foreground = WarnBrush(),
-                    FontSize = 10,
-                });
-            }
+            stack.Children.Add(Row(window));
         }
 
+        if (usage.Plan is { } plan)
+            stack.Children.Add(Note(plan, 0.45, new Thickness(0, 14, 0, 0)));
         if (usage.CreditBalance is { } balance)
-            lines.Add(new System.Windows.Documents.Run($"Balance: {balance}\n"));
+            stack.Children.Add(Note(balance, 0.9, new Thickness(0, 8, 0, 0)));
+        if (usage.State == UsageState.Stale)
+            stack.Children.Add(Note(Ui.CachedReading, 0.4, new Thickness(0, 8, 0, 0)));
 
-        if (lines.Count == 0)
-            lines.Add(new System.Windows.Documents.Run("No usage reported\n"));
-
-        _content.Inlines.AddRange(lines);
-        IsOpen = true;
+        return stack;
     }
 
-    private static string DescribeKind(UsageWindow window)
+    private static UIElement Row(UsageWindow window)
     {
-        if (window.Scope is { } scope)
-            return $"{WindowName(window)} · {scope}";
-        return WindowName(window);
+        var fraction = Math.Clamp(window.UsedFraction, 0, 1);
+        var spent = window.IsExhausted || fraction >= 1;
+        var accent = UsagePaint.BrushFor(fraction, window.IsExhausted);
+        var block = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+        block.Children.Add(new TextBlock
+        {
+            Text = Describe(window),
+            FontFamily = Face,
+            FontSize = DesignTokens.TypeCaption,
+            Foreground = Brush("MutedForeground", Color.FromRgb(0x9A, 0x9A, 0x9A)),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        block.Children.Add(new UsageMeter(fraction, accent));
+
+        var facts = new Grid();
+        facts.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        facts.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var percent = new TextBlock
+        {
+            Text = spent
+                ? Ui.Spent
+                : window.UsedFraction >= UsagePaint.Warning
+                    ? Ui.UsedLeftLine(Math.Round(window.UsedFraction * 100), Math.Round((1 - window.UsedFraction) * 100))
+                    : Ui.UsedLine(Math.Round(window.UsedFraction * 100)),
+            FontFamily = Face,
+            FontSize = DesignTokens.TypeCaption,
+            FontWeight = FontWeights.Medium,
+            Foreground = spent
+                ? UsagePaint.BrushFor(1, true)
+                : Brush("RailForeground", Colors.White),
+        };
+        System.Windows.Documents.Typography.SetNumeralAlignment(percent, FontNumeralAlignment.Tabular);
+        Grid.SetColumn(percent, 0);
+        facts.Children.Add(percent);
+        if (window.ResetsAt is { } reset)
+        {
+            var when = new TextBlock
+            {
+                Text = reset.ToLocalTime() switch
+                {
+                    var local when local.Date == DateTime.Today => Ui.ResetsToday(local.ToString("HH:mm")),
+                    var local when local.Date == DateTime.Today.AddDays(1) => Ui.ResetsTomorrow(local.ToString("HH:mm")),
+                    var local => Ui.ResetsOn(local.ToString("MMM d HH:mm")),
+                },
+                FontFamily = Face,
+                FontSize = DesignTokens.TypeCaption,
+                Opacity = 0.5,
+                Foreground = Brush("MutedForeground", Color.FromRgb(0x9A, 0x9A, 0x9A)),
+            };
+            Grid.SetColumn(when, 1);
+            facts.Children.Add(when);
+        }
+
+        block.Children.Add(facts);
+
+        if (!spent && BurnRate.For(window, DateTimeOffset.Now) is { TimeToExhausted: { } eta } && eta > TimeSpan.Zero)
+        {
+            block.Children.Add(new TextBlock
+            {
+                Text = eta.TotalMinutes < 90
+                    ? Ui.RunsOutInMinutes(Math.Max(1, (int)Math.Round(eta.TotalMinutes)))
+                    : Ui.WontLastWindow,
+                FontFamily = Face,
+                FontSize = 11.5,
+                Margin = new Thickness(0, 7, 0, 0),
+                Foreground = UsagePaint.BrushFor(0.9, false),
+                Opacity = 0.9,
+            });
+        }
+
+        return block;
     }
 
-    private static string WindowName(UsageWindow window) => window.Kind switch
+    private static TextBlock Note(string text, double opacity, Thickness margin) => new()
     {
-        UsageWindowKind.FiveHour => "5-hour limit",
-        UsageWindowKind.Weekly => "Weekly limit",
-        UsageWindowKind.Monthly => "Monthly limit",
-        UsageWindowKind.Daily => "Daily limit",
-        UsageWindowKind.Spend => "Spend limit",
-        UsageWindowKind.Balance => "Balance",
-        UsageWindowKind.Messages => "Messages",
-        _ => $"Limit ({TimeSpan.FromSeconds(window.WindowSeconds).TotalHours:0}h)",
+        Text = text,
+        FontFamily = Face,
+        FontSize = DesignTokens.TypeCaption,
+        Opacity = opacity,
+        Margin = margin,
+        Foreground = Brush("MutedForeground", Color.FromRgb(0x9A, 0x9A, 0x9A)),
+        TextWrapping = TextWrapping.Wrap,
     };
 
-    private static System.Windows.Media.Brush ForegroundBrush() =>
-        TryFind("RailForeground") ?? System.Windows.Media.Brushes.White;
-
-    private static System.Windows.Media.Brush MutedBrush() =>
-        TryFind("MutedForeground") ?? System.Windows.Media.Brushes.Gray;
-
-    private static System.Windows.Media.Brush WarnBrush() =>
-        TryFind("RingExhausted") ?? System.Windows.Media.Brushes.OrangeRed;
-
-    private static System.Windows.Documents.Run Header(string text) => new(text + "\n")
+    private static string Describe(UsageWindow window)
     {
-        FontWeight = FontWeights.SemiBold,
-        Foreground = ForegroundBrush(),
-    };
+        var name = window.Kind switch
+        {
+            UsageWindowKind.FiveHour => Ui.LimitFiveHour,
+            UsageWindowKind.Weekly => Ui.LimitWeekly,
+            UsageWindowKind.Monthly => Ui.LimitMonthly,
+            UsageWindowKind.Daily => Ui.LimitDaily,
+            UsageWindowKind.Spend => Ui.LimitSpend,
+            UsageWindowKind.Balance => Ui.LimitBalance,
+            UsageWindowKind.Messages => Ui.LimitMessages,
+            _ => Ui.LimitOther,
+        };
+        return window.Scope is { } scope ? $"{name} · {scope}" : name;
+    }
+
+    private static readonly FontFamily Face = new("Segoe UI Variable Display, Segoe UI");
+
+    private static Brush Brush(string key, Color fallback)
+    {
+        if (System.Windows.Application.Current?.TryFindResource(key) is Brush brush) return brush;
+        var solid = new SolidColorBrush(fallback);
+        solid.Freeze();
+        return solid;
+    }
+}
+
+/// <summary>One limit's bar. A reading with no windows never creates one.</summary>
+public sealed class UsageMeter : Border
+{
+    public double FillFraction { get; }
+
+    public UsageMeter(double fraction, Brush accent)
+    {
+        FillFraction = Math.Clamp(fraction, 0, 1);
+        Height = 6;
+        Margin = new Thickness(0, 7, 0, 7);
+        CornerRadius = new CornerRadius(3);
+        Background = new SolidColorBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
+        ClipToBounds = true;
+        var fill = new Border
+        {
+            Height = 6,
+            CornerRadius = new CornerRadius(3),
+            Background = accent,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+        };
+        SizeChanged += (_, _) => fill.Width = Math.Max(0, ActualWidth * FillFraction);
+        Child = fill;
+    }
 }

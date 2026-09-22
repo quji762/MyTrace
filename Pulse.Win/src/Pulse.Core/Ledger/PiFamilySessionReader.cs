@@ -24,7 +24,39 @@ public static class PiFamilySessionReader
         _ => null,
     };
 
-    public static IReadOnlyList<AgentUsageRecord> Records(string client, string? userProfile = null)
+    /// <summary>Session root for one client. `PI_CODING_AGENT_DIR` is deliberately
+    /// ignored: Pi and omp both read it, and honouring it in either would scan the
+    /// same tree twice. Senpi and Kimchi honour their own overrides.</summary>
+    public static string? SessionRoot(
+        string client,
+        string home,
+        IReadOnlyDictionary<string, string?>? environment = null)
+    {
+        string? FromEnv(string name)
+        {
+            var value = environment is null
+                ? Environment.GetEnvironmentVariable(name)
+                : environment.GetValueOrDefault(name);
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        return client switch
+        {
+            "pi" => Path.Combine(home, ".pi", "agent", "sessions"),
+            "omp" => Path.Combine(home, ".omp", "agent", "sessions"),
+            "senpi" => FromEnv("SENPI_CODING_SESSION_DIR")
+                ?? Path.Combine(FromEnv("SENPI_CODING_AGENT_DIR") ?? Path.Combine(home, ".senpi"), "agent", "sessions"),
+            "kimchi" => Path.Combine(
+                FromEnv("KIMCHI_CODING_AGENT_DIR") ?? Path.Combine(home, ".config", "kimchi"),
+                "harness", "sessions"),
+            _ => null,
+        };
+    }
+
+    public static IReadOnlyList<AgentUsageRecord> Records(
+        string client,
+        string? userProfile = null,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
         if (ConfigurationFor(client) is not { } configuration) return Array.Empty<AgentUsageRecord>();
 
@@ -32,14 +64,7 @@ public static class PiFamilySessionReader
         // Roots follow upstream SessionLogPaths exactly: the agent segment is
         // part of the real layout (`.pi/agent/sessions`), and Kimchi lives
         // under .config/kimchi/harness rather than its own dot-directory.
-        var root = client switch
-        {
-            "pi" => Path.Combine(home, ".pi", "agent", "sessions"),
-            "omp" => Path.Combine(home, ".omp", "agent", "sessions"),
-            "senpi" => Path.Combine(home, ".senpi", "agent", "sessions"),
-            "kimchi" => Path.Combine(home, ".config", "kimchi", "harness", "sessions"),
-            _ => null,
-        };
+        var root = SessionRoot(client, home, environment);
         // Only the matching client's root is scanned; a root that does not
         // exist reads as empty.
         if (root is null || !Directory.Exists(root)) return Array.Empty<AgentUsageRecord>();

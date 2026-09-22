@@ -33,8 +33,11 @@ public static class AdaptiveRefresh
     }
 
     /// <summary>
-    /// Compute the next interval given the previous one and current signals.
-    /// Only ever waits longer than requested by signals; returns within [Floor, effective ceiling].
+    /// Compute the next interval from the previous one and current signals.
+    /// A visible idle panel waits the ceiling (five minutes when the provider
+    /// cannot be seen locally). Fresh transcript writes and a recent hover
+    /// come back to the floor. A hidden panel or a constrained machine only
+    /// lengthens the wait. The result stays inside [Floor, effective ceiling].
     /// </summary>
     public static TimeSpan NextInterval(TimeSpan previous, Signals signals)
     {
@@ -44,19 +47,33 @@ public static class AdaptiveRefresh
         if (signals.LastLocalActivity is { } lastActivity)
         {
             var sinceActivity = DateTimeOffset.UtcNow - lastActivity;
-            if (sinceActivity > TimeSpan.FromMinutes(30))
-                interval = TimeSpan.FromMinutes(15);
-            else if (sinceActivity > TimeSpan.FromMinutes(10))
+            if (sinceActivity < TimeSpan.Zero) sinceActivity = TimeSpan.Zero;
+            if (sinceActivity < TimeSpan.FromMinutes(10))
+                interval = Floor;
+            else if (sinceActivity < TimeSpan.FromMinutes(30))
                 interval = TimeSpan.FromMinutes(5);
+            else
+                interval = TimeSpan.FromMinutes(15);
+        }
+        else if (signals.PanelVisible)
+        {
+            // No local write to watch. Waiting the cap is the idle cadence;
+            // balance providers stop at five minutes instead of half an hour.
+            interval = ceiling;
         }
 
         if (signals.PowerConstrained)
+        {
+            // Battery: never faster than 15m, even under a 5m unwatched cap.
+            ceiling = Max(ceiling, TimeSpan.FromMinutes(15));
             interval = Max(interval, TimeSpan.FromMinutes(15));
+        }
 
         if (!signals.PanelVisible)
             interval = Max(interval, TimeSpan.FromMinutes(10));
 
-        if (signals.RecentlyHovered)
+        // Hover speeds things up only on AC — never below the battery floor.
+        if (signals.RecentlyHovered && !signals.PowerConstrained)
             interval = Min(interval, Floor);
 
         return Clamp(interval, Floor, ceiling);

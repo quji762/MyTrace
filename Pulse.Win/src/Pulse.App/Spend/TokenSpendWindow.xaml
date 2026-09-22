@@ -1,160 +1,122 @@
 <Window x:Class="Pulse.App.Spend.TokenSpendWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pulse — Token Spend"
-        Width="760" Height="560"
+        Title="Pulse"
+        Width="880" Height="640"
+        MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterScreen"
-        Background="#FF1E1E1E">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="200" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+        Background="{DynamicResource SettingsBackground}"
+        Foreground="{DynamicResource RailForeground}"
+        FontFamily="Segoe UI, Segoe UI Variable, Microsoft YaHei UI, sans-serif">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Pulse.App;component/Themes/PulseStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        <Style TargetType="Button" BasedOn="{StaticResource PulseButton}" />
+        <Style TargetType="TextBox" BasedOn="{StaticResource PulseTextBox}" />
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource RailForeground}" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Row" Background="Transparent" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}" Margin="8,1">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverOverlay}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource ControlBackground}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="Foreground" Value="{DynamicResource MutedForeground}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Border Background="{DynamicResource CardBackground}"
+                                BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1"
+                                Padding="6,4">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        </ResourceDictionary>
+    </Window.Resources>
 
-        <!-- Header: provider tabs + summary line -->
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal">
-                <RadioButton x:Name="ClaudeTab" Content="Claude Code" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CodexTab" Content="Codex" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="OpenCodeTab" Content="OpenCode" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CherryTab" Content="Cherry Studio" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="ClineTab" Content="Cline" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AmpTab" Content="Amp" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="GooseTab" Content="Goose" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CopilotTab" Content="Copilot OTEL" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CopilotDesktopTab" Content="Copilot Desktop" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CopilotVsCodeTab" Content="Copilot VS Code" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="KiroTab" Content="Kiro" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="QwenTab" Content="Qwen" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="GeminiTab" Content="Gemini" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="ZCodeTab" Content="ZCode" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="DshTab" Content="DSH" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="JunieTab" Content="Junie" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CodebuffTab" Content="Codebuff" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="UnslothTab" Content="Unsloth" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="JcodeTab" Content="Jcode" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="FxTab" Content="Fx" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="OpenClawTab" Content="OpenClaw" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="DroidTab" Content="Droid" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="MuxTab" Content="Mux" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="GjcTab" Content="GJC" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="PiTab" Content="Pi" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="PrimeTab" Content="Prime Agent" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="RooCodeTab" Content="Roo/Kilo/Cline" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="BuddyTab" Content="CodeBuddy/WorkBuddy" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="HermesTab" Content="Hermes" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="ZedTab" Content="Zed" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="LmStudioTab" Content="LM Studio" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="MicodeTab" Content="MiMo Code" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="OpenCodeReviewTab" Content="OpenCode Review" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CommandCodeTab" Content="CommandCode" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CrushTab" Content="Crush" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="HindsightTab" Content="Hindsight" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="McodeTab" Content="Mcode" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="TraeTab" Content="Trae" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CopilotLogTab" Content="Copilot Log" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="CursorTab" Content="Cursor" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="ReasonixTab" Content="Reasonix" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AugmentTab" Content="Augment" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="WarpTab" Content="Warp" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="DevinCliTab" Content="Devin CLI" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="GrokTab" Content="Grok Build" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="KimiCliTab" Content="Kimi CLI" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="DevinDesktopTab" Content="Devin Desktop" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AntigravityCliTab" Content="Antigravity CLI" GroupName="spend" Margin="0,0,16,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-                <RadioButton x:Name="AntigravityTab" Content="Antigravity" GroupName="spend" Margin="0,0,8,0"
-                             Foreground="#FFF2F2F2" Checked="OnProviderTabChanged" />
-            </StackPanel>
-            <Button Grid.Column="1" Content="Refresh" Padding="12,4" Click="OnRefresh" />
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="232" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBackground}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Token spend" FontSize="16" FontWeight="SemiBold"
+                           Margin="16,20,16,4" />
+                <TextBlock DockPanel.Dock="Top" Text="One row per source"
+                           FontSize="12" Opacity="0.5" Margin="16,0,16,12" />
+                <ListBox x:Name="SourceList"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Foreground="{DynamicResource RailForeground}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="OnSourceChanged" />
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Column="1" Margin="20,16,20,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="200" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" LastChildFill="False">
+                <Button DockPanel.Dock="Right" Content="Refresh" Click="OnRefresh" VerticalAlignment="Center" />
+                <TextBlock Text="Local logs" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+
+            <TextBlock Grid.Row="1" x:Name="SummaryText" FontSize="12" Opacity="0.85"
+                       Margin="0,12,0,10" TextWrapping="Wrap" />
+
+            <Border Style="{StaticResource Card}" Padding="8" Margin="10,10,10,0">
+                <Canvas x:Name="ChartCanvas" SizeChanged="OnChartResized" />
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="10,10,10,10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Sessions" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ListView Grid.Row="1" x:Name="SessionList" Background="Transparent"
+                              BorderThickness="0" Foreground="{DynamicResource RailForeground}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Session" Width="280" DisplayMemberBinding="{Binding Name}" />
+                                <GridViewColumn Header="Project" Width="140" DisplayMemberBinding="{Binding Project}" />
+                                <GridViewColumn Header="Tokens" Width="90" DisplayMemberBinding="{Binding TokensText}" />
+                                <GridViewColumn Header="End" Width="140" DisplayMemberBinding="{Binding EndText}" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Grid>
+            </Border>
         </Grid>
-
-        <TextBlock Grid.Row="1" x:Name="SummaryText" FontSize="12" Foreground="#FFF2F2F2"
-                   Margin="0,10,0,8" TextWrapping="Wrap" />
-
-        <!-- Daily tokens chart: one bar per day, gaps kept as zero-height days -->
-        <Border Grid.Row="2" Background="#FF2A2A2A" CornerRadius="6" Padding="8">
-            <Canvas x:Name="ChartCanvas" SizeChanged="OnChartResized" />
-        </Border>
-
-        <!-- Session list: one row per transcript -->
-        <Border Grid.Row="3" Background="#FF2A2A2A" CornerRadius="6" Padding="8" Margin="0,10,0,0">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="Sessions" FontSize="12" FontWeight="SemiBold"
-                           Foreground="#FFF2F2F2" Margin="0,0,0,6" />
-                <ListView Grid.Row="1" x:Name="SessionList" Background="Transparent"
-                          BorderThickness="0" Foreground="#FFF2F2F2">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Session" Width="300"
-                                            DisplayMemberBinding="{Binding Name}" />
-                            <GridViewColumn Header="Project" Width="140"
-                                            DisplayMemberBinding="{Binding Project}" />
-                            <GridViewColumn Header="Tokens" Width="90"
-                                            DisplayMemberBinding="{Binding TokensText}" />
-                            <GridViewColumn Header="End" Width="140"
-                                            DisplayMemberBinding="{Binding EndText}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </Grid>
-        </Border>
     </Grid>
 </Window>

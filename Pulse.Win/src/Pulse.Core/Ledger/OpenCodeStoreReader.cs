@@ -58,6 +58,7 @@ public enum TranscriptKind
     KimiCli,
     DevinDesktop,
     AntigravityCli,
+    AntigravityIde,
 }
 
 public static partial class TranscriptLocator

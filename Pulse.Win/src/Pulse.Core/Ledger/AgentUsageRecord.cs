@@ -73,6 +73,9 @@ public static class AgentUsageLedger
             var model = record.Model;
 
             // Every count is a real, non-negative one that fits an int.
+            if (record.Tally.Input < 0 || record.Tally.Output < 0 ||
+                record.Tally.CacheRead < 0 || record.Tally.CacheWrite < 0)
+                continue;
             var known = record.KnownTotal;
             var total = known + record.UnclassifiedTokens;
             if (known < 0 || record.UnclassifiedTokens < 0 || total <= 0) continue;

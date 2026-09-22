@@ -201,7 +201,8 @@ public sealed record UsageLedger
         double cost = 0;
         foreach (var slot in Slots)
         {
-            if (slot.Start < start) continue;
+            // A 15-min slot that straddles the boundary counts in full.
+            if (slot.Start.AddMinutes(15) <= start) continue;
             tokens += slot.Tokens;
             cost += slot.Cost;
         }

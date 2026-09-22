@@ -116,7 +116,16 @@ public abstract class HttpUsageProviderBase : IUsageProvider
             {
                 UnavailabilityKind.Unauthorized => ProviderReadHealth.Unauthorized,
                 UnavailabilityKind.RateLimited => ProviderReadHealth.RateLimited,
-                UnavailabilityKind.NotConfigured => ProviderReadHealth.Healthy,
+                UnavailabilityKind.NotConfigured => ProviderReadHealth.ProviderUnavailable,
+                _ => ProviderReadHealth.ProviderUnavailable,
+            }, ex.Message);
+        }
+        catch (Pulse.Providers.MiniMax.MiniMaxProvider.EnvelopeException ex)
+        {
+            return ProviderReadResult.Failed(ex.Kind switch
+            {
+                UnavailabilityKind.Unauthorized => ProviderReadHealth.Unauthorized,
+                UnavailabilityKind.RateLimited => ProviderReadHealth.RateLimited,
                 _ => ProviderReadHealth.ProviderUnavailable,
             }, ex.Message);
         }
@@ -174,18 +183,23 @@ public abstract class HttpUsageProviderBase : IUsageProvider
     }
 }
 
-/// <summary>Thin HttpClient wrapper so tests can inject a stub handler.</summary>
+/// <summary>Thin HttpClient wrapper so tests can inject a stub handler.
+/// Production traffic follows <see cref="Pulse.Core.Platform.NetworkProxy"/>.</summary>
 public static class HttpClientFactory
 {
     public static Func<HttpMessageHandler>? HandlerOverride;
 
     public static HttpClient CreateClient()
     {
-        var handler = HandlerOverride?.Invoke() ?? new SocketsHttpHandler
+        if (HandlerOverride is not null)
+            return new HttpClient(HandlerOverride(), disposeHandler: true) { Timeout = TimeSpan.FromSeconds(20) };
+
+        var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             AutomaticDecompression = System.Net.DecompressionMethods.All,
         };
+        Pulse.Core.Platform.NetworkProxy.Load().ApplyTo(handler);
         var client = new HttpClient(handler, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(20),

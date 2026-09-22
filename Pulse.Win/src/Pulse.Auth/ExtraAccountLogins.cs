@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -7,13 +6,13 @@ namespace Pulse.Auth;
 
 /// <summary>
 /// xAI Grok device flow; port of upstream OAuthLogin.Configuration(.grok) with
-/// deviceFlow: .standard â€” the RFC 8628 specification's own shape (unlike OpenAI's).
+/// deviceFlow: .standard â€?the RFC 8628 specification's own shape (unlike OpenAI's).
 /// Parameters from xAI's discovery document, client id is the CLI's.
 ///
 /// Scope set is deliberate: `grok-cli:access` gates the CLI proxy, `email` keeps two
 /// Grok accounts from both being offered as "Grok"; profile/api/conversation scopes
 /// are dropped (the last would let this app read and write chats). `billing:read`
-/// looks right and is REFUSED by the endpoint â€” do not add it.
+/// looks right and is REFUSED by the endpoint â€?do not add it.
 /// </summary>
 public sealed class GrokDeviceLogin
 {
@@ -44,14 +43,21 @@ public sealed class GrokDeviceLogin
             throw new InvalidOperationException("x.ai refused the device-code request");
 
         // xAI DOES offer verification_uri_complete; using it is the service's own
-        // decision (GitHub deliberately sends none â€” that is the difference).
+        // decision (GitHub deliberately sends none â€?that is the difference).
         var complete = Str(root, "verification_uri_complete");
         var interval = Num(root, "interval") ?? 5;
-        return new DevicePrompt(code!, complete ?? page!, TimeSpan.FromSeconds(Math.Max(interval, 1)), complete);
+        // user_code is what the person types. device_code is what the token poll sends.
+        return new DevicePrompt(code!, complete ?? page!, TimeSpan.FromSeconds(Math.Max(interval, 1)), complete, handle);
     }
 
+    /// <summary>The device_code retained on the prompt. Polling with the user_code never completes.</summary>
+    public static string RequireDeviceCode(DevicePrompt prompt) =>
+        string.IsNullOrEmpty(prompt.DeviceCode)
+            ? throw new InvalidOperationException("x.ai device_code was not retained")
+            : prompt.DeviceCode;
+
     /// <summary>
-    /// RFC 8628 polling: waiting and refusal BOTH arrive as a 400 â€” the body's
+    /// RFC 8628 polling: waiting and refusal BOTH arrive as a 400 â€?the body's
     /// `error` is what separates them, never the status.
     /// </summary>
     public async Task<OAuthTokens?> WaitForTokensAsync(DevicePrompt prompt, CancellationToken cancellationToken = default)
@@ -62,7 +68,7 @@ public sealed class GrokDeviceLogin
         while (DateTimeOffset.Now < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = await PollAsync(client, prompt.UserCode, cancellationToken).ConfigureAwait(false);
+            var outcome = await PollAsync(client, RequireDeviceCode(prompt), cancellationToken).ConfigureAwait(false);
             if (outcome.Tokens is { } tokens) return tokens;
             if (!outcome.StillWaiting) return null;
             await Task.Delay(prompt.Interval, cancellationToken).ConfigureAwait(false);
@@ -135,7 +141,7 @@ public sealed class GrokDeviceLogin
 /// <summary>
 /// Grok Bot's extra accounts via Cursor's web login; port of upstream
 /// CursorWebLogin. NOT OAuth: Cursor publishes no authorize/token pair for a third
-/// party. 1) open the login page with a challenge+uuid, 2) poll â€” **404 means "not
+/// party. 1) open the login page with a challenge+uuid, 2) poll â€?**404 means "not
 /// yet"**, only a 200 with accessToken ends it.
 ///
 /// The verifier is 32 random bytes base64url-encoded; the challenge is the base64url
@@ -151,9 +157,8 @@ public sealed class CursorWebLogin
 
     public Attempt Start()
     {
-        var (_, verifier) = Pkce.Create();
-        // Challenge = SHA-256 of the ENCODED verifier string.
-        var challenge = Pkce.Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+        // Challenge = SHA-256 of the ENCODED verifier string (Pkce.Create already does this).
+        var (verifier, challenge) = Pkce.Create();
         var uuid = Guid.NewGuid().ToString();
 
         var loginUrl = $"{Website}/loginDeepControl?challenge={Uri.EscapeDataString(challenge)}" +
@@ -220,24 +225,30 @@ public static class OAuthRefresh
         if (string.IsNullOrEmpty(current.RefreshToken)) return null;
 
         using var client = HttpClientFactory.Shared();
-        var (body, contentType) = config.SendsJson
-            ? (JsonSerializer.Serialize(new Dictionary<string, string>
-                {
-                    ["grant_type"] = "refresh_token",
-                    ["refresh_token"] = current.RefreshToken,
-                    ["client_id"] = config.ClientID,
-                    ["scope"] = string.Join(" ", config.Scopes),
-                }), "application/json")
-            : (new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["grant_type"] = "refresh_token",
-                    ["refresh_token"] = current.RefreshToken,
-                    ["client_id"] = config.ClientID,
-                    ["scope"] = string.Join(" ", config.Scopes),
-                }).ReadAsStringAsync().GetAwaiter().GetResult(), "application/x-www-form-urlencoded");
+        var fields = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = current.RefreshToken,
+            ["client_id"] = config.ClientID,
+            ["scope"] = string.Join(" ", config.Scopes),
+        };
+        string body;
+        string contentType;
+        if (config.SendsJson)
+        {
+            body = JsonSerializer.Serialize(fields);
+            contentType = "application/json";
+        }
+        else
+        {
+            // Build the form body without FormUrlEncodedContent's sync read.
+            body = string.Join("&", fields.Select(kv =>
+                Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(kv.Value)));
+            contentType = "application/x-www-form-urlencoded";
+        }
 
         using var content = new StringContent(body, Encoding.UTF8, contentType);
-        var response = await client.PostAsync(config.TokenUrl, content, cancellationToken).ConfigureAwait(false);
+        using var response = await client.PostAsync(config.TokenUrl, content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) return null;
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));

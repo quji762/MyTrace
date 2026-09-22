@@ -7,6 +7,10 @@ namespace Pulse.Core.Platform;
 /// through the current user's Run key (HKCU — no admin required, per the policy
 /// that normal features must not need elevation).
 /// </summary>
+/// <summary>Win32-only helpers (registry startup key, single-instance mutex).
+/// The product is Windows-only; the attribute keeps CA1416 honest on the
+/// cross-platform TFM.</summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public static class WindowsIntegration
 {
     private const string MutexName = "PulseWin.SingleInstance.{4E3A5C6B}";

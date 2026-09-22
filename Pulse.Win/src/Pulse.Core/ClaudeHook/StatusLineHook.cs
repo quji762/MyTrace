@@ -137,7 +137,7 @@ public static class StatusLineInstaller
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             return document.RootElement.EnumerateObject()
-                .Where(property => property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                .Where(property => property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null)
                 .ToDictionary(property => property.Name, property => property.Value.Clone());
         }
         catch (JsonException)
@@ -283,9 +283,10 @@ public static class StatusLineCapture
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var root = document.RootElement;
-            var capturedAt = root.TryGetProperty("capturedAt", out var at) && at.TryGetInt64(out var seconds)
-                ? DateTimeOffset.FromUnixTimeSeconds(seconds)
-                : DateTimeOffset.Now;
+            // No capturedAt: age is unknown — do not stamp Now (stale would look fresh).
+            if (!root.TryGetProperty("capturedAt", out var at) || !at.TryGetInt64(out var seconds))
+                return null;
+            var capturedAt = DateTimeOffset.FromUnixTimeSeconds(seconds);
 
             double? fiveHour = null, sevenDay = null;
             DateTimeOffset? fiveHourReset = null, sevenDayReset = null;

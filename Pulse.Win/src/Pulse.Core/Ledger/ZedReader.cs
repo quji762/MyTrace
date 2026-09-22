@@ -128,7 +128,7 @@ public static class ZedReader
 
     /// <summary>`created_at` first, else `updated_at`, else the payload's own
     /// updated_at. An ISO 8601 string or a numeric epoch.</summary>
-    private static DateTimeOffset? TimestampOf(SqliteDataReader reader, int updatedOrdinal, string updatedAt, JsonElement thread)
+    private static DateTimeOffset? TimestampOf(SqliteDataReader reader, int updatedOrdinal, string? updatedAt, JsonElement thread)
     {
         if (!reader.IsDBNull(4))
         {
@@ -142,7 +142,7 @@ public static class ZedReader
         return null;
     }
 
-    private static DateTimeOffset? Flexible(string text)
+    private static DateTimeOffset? Flexible(string? text)
     {
         if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var parsed))

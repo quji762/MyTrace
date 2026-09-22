@@ -75,20 +75,38 @@ public static class ThemeManager
     {
         ["RailBackground"] = "#E8141414",
         ["RailForeground"] = "#FFF2F2F2",
-        ["RingTrack"] = "#33FFFFFF",
-        ["SettingsBackground"] = "#FF1E1E1E",
-        ["CardBackground"] = "#FF2A2A2A",
-        ["MutedForeground"] = "#FF9E9E9E",
+        ["RingTrack"] = "#2EFFFFFF",
+        ["SettingsBackground"] = "#FF161616",
+        ["SidebarBackground"] = "#FF101010",
+        ["CardBackground"] = "#FF222222",
+        ["CardBorder"] = "#FF2E2E2E",
+        ["ControlBackground"] = "#FF2C2C2C",
+        ["ControlBorder"] = "#FF3A3A3A",
+        ["MutedForeground"] = "#FF9A9A9A",
+        ["SubtleForeground"] = "#FF6E6E6E",
+        ["HoverOverlay"] = "#14FFFFFF",
+        ["PressedOverlay"] = "#1E000000",
+        ["FocusRing"] = "#664C8BF5",
+        ["Divider"] = "#1EFFFFFF",
     };
 
     private static readonly IReadOnlyDictionary<string, string> LightPalette = new Dictionary<string, string>
     {
         ["RailBackground"] = "#E8FAFAFA",
         ["RailForeground"] = "#FF1A1A1A",
-        ["RingTrack"] = "#33000000",
+        ["RingTrack"] = "#26000000",
         ["SettingsBackground"] = "#FFF3F3F3",
+        ["SidebarBackground"] = "#FFECECEC",
         ["CardBackground"] = "#FFFFFFFF",
+        ["CardBorder"] = "#FFE2E2E2",
+        ["ControlBackground"] = "#FFF7F7F7",
+        ["ControlBorder"] = "#FFD4D4D4",
         ["MutedForeground"] = "#FF6B6B6B",
+        ["SubtleForeground"] = "#FF8A8A8A",
+        ["HoverOverlay"] = "#0A000000",
+        ["PressedOverlay"] = "#12000000",
+        ["FocusRing"] = "#554C8BF5",
+        ["Divider"] = "#14000000",
     };
 
     private static void SwapPalette(IReadOnlyDictionary<string, string> palette)
@@ -96,15 +114,29 @@ public static class ThemeManager
         var resources = System.Windows.Application.Current?.Resources;
         if (resources is null) return;
 
-        foreach (var (key, color) in palette)
+        void Apply(System.Windows.ResourceDictionary dictionary)
         {
-            var brush = new System.Windows.Media.SolidColorBrush(
-                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
-            brush.Freeze();
-            if (resources.Contains(key))
-                resources[key] = brush;
-            else
-                resources.Add(key, brush);
+            foreach (var (key, color) in palette)
+            {
+                var brush = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
+                brush.Freeze();
+                if (dictionary.Contains(key))
+                    dictionary[key] = brush;
+                else
+                    dictionary.Add(key, brush);
+            }
+        }
+
+        Apply(resources);
+        // Windows that merged PulseStyles own their brush keys; retarget those too.
+        var app = System.Windows.Application.Current;
+        if (app is null) return;
+        foreach (System.Windows.Window window in app.Windows)
+        {
+            Apply(window.Resources);
+            foreach (var merged in window.Resources.MergedDictionaries)
+                Apply(merged);
         }
     }
 

@@ -2,8 +2,10 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Pulse.App;
 using Pulse.Core.Accounts;
 using Pulse.Core.Ledger;
+using Pulse.Core.Providers;
 
 namespace Pulse.App.Spend;
 
@@ -23,6 +25,7 @@ public partial class TokenSpendWindow : Window
     private readonly TranscriptScanner _scanner;
     private readonly string? _vsCodeHome;
     private ModelPrices? _prices;
+    private IReadOnlyDictionary<string, ModelPrice>? _priceTable;
     private TranscriptKind _kind = TranscriptKind.ClaudeCode;
     private UsageLedger _ledger = UsageLedger.EmptyLedger;
     private IReadOnlyDictionary<string, ScannedTranscript> _files =
@@ -30,14 +33,98 @@ public partial class TokenSpendWindow : Window
 
     private const int SummaryWindowDays = 7;
 
+    /// <summary>One scannable row. The mark is the quota provider's when the source has one.</summary>
+    public sealed record SpendSource(string Label, TranscriptKind Kind, ProviderId? Mark);
+
+    public static IReadOnlyList<SpendSource> Catalog { get; } =
+    [
+        new("Claude Code", TranscriptKind.ClaudeCode, ProviderId.ClaudeCode),
+        new("Codex", TranscriptKind.Codex, ProviderId.Codex),
+        new("OpenCode", TranscriptKind.OpenCode, ProviderId.OpenCodeGo),
+        new("Cherry Studio", TranscriptKind.CherryStudio, null),
+        new("Cline", TranscriptKind.Cline, null),
+        new("Amp", TranscriptKind.Amp, null),
+        new("Goose", TranscriptKind.Goose, null),
+        new("Copilot OTEL", TranscriptKind.CopilotOtel, ProviderId.Copilot),
+        new("Copilot Desktop", TranscriptKind.CopilotDesktop, ProviderId.Copilot),
+        new("Copilot VS Code", TranscriptKind.CopilotVsCode, ProviderId.Copilot),
+        new("Kiro", TranscriptKind.Kiro, null),
+        new("Qwen", TranscriptKind.Qwen, null),
+        new("Gemini", TranscriptKind.Gemini, null),
+        new("ZCode", TranscriptKind.ZCode, null),
+        new("DSH", TranscriptKind.Dsh, null),
+        new("Junie", TranscriptKind.Junie, null),
+        new("Codebuff", TranscriptKind.Codebuff, null),
+        new("Unsloth", TranscriptKind.Unsloth, null),
+        new("Jcode", TranscriptKind.Jcode, null),
+        new("Fx", TranscriptKind.Fx, null),
+        new("OpenClaw", TranscriptKind.OpenClaw, null),
+        new("Droid", TranscriptKind.Droid, null),
+        new("Mux", TranscriptKind.Mux, null),
+        new("GJC", TranscriptKind.Gjc, null),
+        new("Pi", TranscriptKind.Pi, null),
+        new("Prime Agent", TranscriptKind.PrimeAgent, null),
+        new("Roo/Kilo/Cline", TranscriptKind.RooCode, null),
+        new("CodeBuddy/WorkBuddy", TranscriptKind.Codebuddy, null),
+        new("Hermes", TranscriptKind.Hermes, null),
+        new("Zed", TranscriptKind.Zed, null),
+        new("LM Studio", TranscriptKind.LmStudio, null),
+        new("MiMo Code", TranscriptKind.Micode, null),
+        new("OpenCode Review", TranscriptKind.OpenCodeReview, ProviderId.OpenCodeGo),
+        new("Command Code", TranscriptKind.CommandCode, ProviderId.CommandCode),
+        new("Crush", TranscriptKind.Crush, null),
+        new("Hindsight", TranscriptKind.Hindsight, null),
+        new("Mcode", TranscriptKind.Mcode, null),
+        new("Trae", TranscriptKind.Trae, null),
+        new("Copilot Log", TranscriptKind.CopilotCombined, ProviderId.Copilot),
+        new("Cursor", TranscriptKind.CursorCaptured, ProviderId.Cursor),
+        new("Reasonix", TranscriptKind.Reasonix, null),
+        new("Augment", TranscriptKind.Augment, null),
+        new("Warp", TranscriptKind.Warp, null),
+        new("Devin CLI", TranscriptKind.DevinCli, ProviderId.Devin),
+        new("Grok Build", TranscriptKind.Grok, ProviderId.Grok),
+        new("Kimi CLI", TranscriptKind.KimiCli, ProviderId.KimiCode),
+        new("Devin Desktop", TranscriptKind.DevinDesktop, ProviderId.Devin),
+        new("Antigravity CLI", TranscriptKind.AntigravityCli, ProviderId.Antigravity),
+        new("Antigravity IDE", TranscriptKind.AntigravityIde, ProviderId.Antigravity),
+        new("Antigravity", TranscriptKind.AntigravityCaptured, ProviderId.Antigravity),
+    ];
+
     public TokenSpendWindow(TranscriptScanner? scanner = null, ModelPrices? prices = null, string? userProfile = null)
     {
         InitializeComponent();
+        Settings.ThemeManager.Apply(Settings.ThemeManager.Current);
         _scanner = scanner ?? new TranscriptScanner();
         _prices = prices;
         _vsCodeHome = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        ClaudeTab.IsChecked = true;
+        foreach (var source in Catalog)
+            SourceList.Items.Add(Row(source));
+        SourceList.SelectedIndex = 0;
         if (_prices is null) _ = LoadPricesAsync();
+    }
+
+    private static ListBoxItem Row(SpendSource source)
+    {
+        var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        if (source.Mark is { } mark)
+        {
+            row.Children.Add(new GlyphView
+            {
+                Provider = mark,
+                Width = 14,
+                Height = 14,
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            });
+        }
+
+        row.Children.Add(new TextBlock
+        {
+            Text = source.Label,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            FontSize = 13,
+        });
+        return new ListBoxItem { Content = row, Tag = source };
     }
 
     /// <summary>The plan vendor to fall back to for a model no first-party
@@ -59,6 +146,7 @@ public partial class TokenSpendWindow : Window
         {
             var table = await ModelPriceCatalog.LoadAsync().ConfigureAwait(true);
             if (table.Count == 0) return;
+            _priceTable = table;
             _prices = new CatalogModelPrices(table, PriceVendor(_kind));
             if (IsActiveTab) Refresh();
         }
@@ -67,92 +155,70 @@ public partial class TokenSpendWindow : Window
 
     private bool IsActiveTab => IsLoaded;
 
-    private void OnProviderTabChanged(object sender, RoutedEventArgs e)
+    private void OnSourceChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ClaudeTab is null) return; // XAML still initializing
-        _kind = CodexTab.IsChecked == true ? TranscriptKind.Codex
-            : OpenCodeTab.IsChecked == true ? TranscriptKind.OpenCode
-            : CherryTab.IsChecked == true ? TranscriptKind.CherryStudio
-            : ClineTab.IsChecked == true ? TranscriptKind.Cline
-            : AmpTab.IsChecked == true ? TranscriptKind.Amp
-            : GooseTab.IsChecked == true ? TranscriptKind.Goose
-            : CopilotTab.IsChecked == true ? TranscriptKind.CopilotOtel
-            : CopilotDesktopTab.IsChecked == true ? TranscriptKind.CopilotDesktop
-            : CopilotVsCodeTab.IsChecked == true ? TranscriptKind.CopilotVsCode
-            : KiroTab.IsChecked == true ? TranscriptKind.Kiro
-            : QwenTab.IsChecked == true ? TranscriptKind.Qwen
-            : GeminiTab.IsChecked == true ? TranscriptKind.Gemini
-            : ZCodeTab.IsChecked == true ? TranscriptKind.ZCode
-            : DshTab.IsChecked == true ? TranscriptKind.Dsh
-            : JunieTab.IsChecked == true ? TranscriptKind.Junie
-            : CodebuffTab.IsChecked == true ? TranscriptKind.Codebuff
-            : UnslothTab.IsChecked == true ? TranscriptKind.Unsloth
-            : JcodeTab.IsChecked == true ? TranscriptKind.Jcode
-            : FxTab.IsChecked == true ? TranscriptKind.Fx
-            : OpenClawTab.IsChecked == true ? TranscriptKind.OpenClaw
-            : DroidTab.IsChecked == true ? TranscriptKind.Droid
-            : MuxTab.IsChecked == true ? TranscriptKind.Mux
-            : GjcTab.IsChecked == true ? TranscriptKind.Gjc
-            : PiTab.IsChecked == true ? TranscriptKind.Pi
-            : PrimeTab.IsChecked == true ? TranscriptKind.PrimeAgent
-            : RooCodeTab.IsChecked == true ? TranscriptKind.RooCode
-            : BuddyTab.IsChecked == true ? TranscriptKind.Codebuddy
-            : HermesTab.IsChecked == true ? TranscriptKind.Hermes
-            : ZedTab.IsChecked == true ? TranscriptKind.Zed
-            : LmStudioTab.IsChecked == true ? TranscriptKind.LmStudio
-            : MicodeTab.IsChecked == true ? TranscriptKind.Micode
-            : OpenCodeReviewTab.IsChecked == true ? TranscriptKind.OpenCodeReview
-            : CommandCodeTab.IsChecked == true ? TranscriptKind.CommandCode
-            : CrushTab.IsChecked == true ? TranscriptKind.Crush
-            : HindsightTab.IsChecked == true ? TranscriptKind.Hindsight
-            : McodeTab.IsChecked == true ? TranscriptKind.Mcode
-            : TraeTab.IsChecked == true ? TranscriptKind.Trae
-            : CopilotLogTab.IsChecked == true ? TranscriptKind.CopilotCombined
-            : CursorTab.IsChecked == true ? TranscriptKind.CursorCaptured
-            : ReasonixTab.IsChecked == true ? TranscriptKind.Reasonix
-            : AugmentTab.IsChecked == true ? TranscriptKind.Augment
-            : WarpTab.IsChecked == true ? TranscriptKind.Warp
-            : DevinCliTab.IsChecked == true ? TranscriptKind.DevinCli
-            : GrokTab.IsChecked == true ? TranscriptKind.Grok
-            : KimiCliTab.IsChecked == true ? TranscriptKind.KimiCli
-            : DevinDesktopTab.IsChecked == true ? TranscriptKind.DevinDesktop
-            : AntigravityCliTab.IsChecked == true ? TranscriptKind.AntigravityCli
-            : AntigravityTab.IsChecked == true ? TranscriptKind.AntigravityCaptured
-            : TranscriptKind.ClaudeCode;
+        if (SourceList?.SelectedItem is not ListBoxItem { Tag: SpendSource source }) return;
+        _kind = source.Kind;
+        // Vendor is per source (opencode-go / cline-pass); rebuild before refresh.
+        if (_priceTable is not null)
+            _prices = new CatalogModelPrices(_priceTable, PriceVendor(_kind));
+        if (SummaryText is null) return;
         Refresh();
     }
 
     private void OnRefresh(object sender, RoutedEventArgs e) => Refresh();
 
+    /// <summary>The pane's read: opt-in off does no discovery; on attributes each source through <see cref="SpendReading"/>.</summary>
+    public static SpendReading.Report ReadSources(string home, bool enabled, ModelPrices? prices, DateOnly? spanStart, DateOnly? spanEnd) =>
+        SpendReading.Read(enabled, home, prices ?? ModelPrices.Empty, spanStart, spanEnd);
+
     private void Refresh()
     {
-        if (_kind is TranscriptKind.CherryStudio or TranscriptKind.Cline or TranscriptKind.Amp or TranscriptKind.Goose or TranscriptKind.CopilotOtel or TranscriptKind.CopilotDesktop or TranscriptKind.CopilotVsCode or TranscriptKind.Kiro or TranscriptKind.Qwen or TranscriptKind.Gemini or TranscriptKind.ZCode or TranscriptKind.Dsh or TranscriptKind.Junie or TranscriptKind.Codebuff or TranscriptKind.Unsloth or TranscriptKind.Jcode or TranscriptKind.Fx or TranscriptKind.OpenClaw or TranscriptKind.Droid or TranscriptKind.Mux or TranscriptKind.Gjc or TranscriptKind.Pi or TranscriptKind.PrimeAgent or TranscriptKind.RooCode or TranscriptKind.Codebuddy or TranscriptKind.Hermes or TranscriptKind.Zed or TranscriptKind.LmStudio or TranscriptKind.Micode or TranscriptKind.OpenCodeReview or TranscriptKind.CommandCode or TranscriptKind.Crush or TranscriptKind.Hindsight or TranscriptKind.Mcode or TranscriptKind.Trae or TranscriptKind.CopilotCombined or TranscriptKind.CursorCaptured or TranscriptKind.AntigravityCaptured or TranscriptKind.Reasonix or TranscriptKind.Augment or TranscriptKind.Warp or TranscriptKind.DevinCli or TranscriptKind.Grok or TranscriptKind.KimiCli or TranscriptKind.DevinDesktop or TranscriptKind.AntigravityCli)
+        if (SummaryText is null) return;
+        // The selected row owns the chart and the session list. Claude Code and
+        // Codex are transcript scans; every other row is that source's records.
+        if (_kind is TranscriptKind.ClaudeCode or TranscriptKind.Codex)
         {
-            RenderRecordBased(_kind);
-            return;
+            var scanned = _scanner.Scan(_kind, _prices ?? ModelPrices.Empty, userProfile: _vsCodeHome);
+            _ledger = scanned.Ledger;
+            _files = scanned.Files;
+            RenderSessions();
+            RenderSummary();
+            RenderChart();
         }
-
-        if (_kind == TranscriptKind.OpenCode)
+        else if (_kind == TranscriptKind.OpenCode)
         {
-            // OpenCode (and Kilo) keeps one SQLite store, not per-session files.
-            var root = TranscriptLocator.OpenCodeRoot();
-            var store = root is null ? null : Directory.EnumerateFiles(root, "db.sqlite",
-                SearchOption.AllDirectories).FirstOrDefault() is { } found ? found : null;
-            _ledger = store is null
+            var root = TranscriptLocator.OpenCodeRoot(_vsCodeHome);
+            var database = root is null ? null : Path.Combine(root, "opencode.db");
+            _ledger = database is null
                 ? UsageLedger.EmptyLedger
-                : OpenCodeStoreReader.LedgerAt(store, _prices ?? ModelPrices.Empty);
+                : OpenCodeStoreReader.LedgerAt(database, _prices ?? ModelPrices.Empty);
             _files = new Dictionary<string, ScannedTranscript>();
+            SessionList.ItemsSource = Array.Empty<SessionRow>();
+            RenderSummary();
+            RenderChart();
         }
         else
         {
-            var result = _scanner.Scan(_kind, _prices ?? ModelPrices.Empty, refresh: true);
-            _ledger = result.Ledger;
-            _files = result.Files;
+            RenderRecordBased(_kind);
         }
 
-        RenderSummary();
-        RenderChart();
-        RenderSessions();
+        // The multi-source report stays behind the opt-in switch, and it is
+        // added under the selected reading rather than instead of it.
+        var optIn = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PulseWin", "spend-opt-in.txt");
+        if (!SpendOptIn.Load(optIn)) return;
+        var home = string.IsNullOrEmpty(_vsCodeHome)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            : _vsCodeHome;
+        var spanEnd = DateOnly.FromDateTime(DateTime.Now);
+        var report = ReadSources(home, enabled: true, _prices, spanEnd.AddDays(-6), spanEnd);
+        var extra = FormatReport(report);
+        if (extra.Length == 0) return;
+        SummaryText.Text = string.IsNullOrEmpty(SummaryText.Text)
+            ? extra
+            : SummaryText.Text + Environment.NewLine + extra;
     }
 
     /// <summary>Record-based sources: CherryStudio, Cline, Amp — each reader
@@ -178,14 +244,13 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.Unsloth => UnslothReader.Records(),
             TranscriptKind.Jcode => JcodeUsageReader.Records(),
             TranscriptKind.Fx => FxUsageReader.Records(),
-            TranscriptKind.OpenClaw => OpenClawSessionReader.Records(),
+            TranscriptKind.OpenClaw => OpenClawSessionReader.Records(_vsCodeHome),
             TranscriptKind.Droid => DroidSessionReader.Records(),
             TranscriptKind.Mux => MuxUsageReader.Records(),
             TranscriptKind.Gjc => GjcUsageReader.Records(),
             TranscriptKind.Pi => PiFamilySessionReader.Records("pi"),
             TranscriptKind.PrimeAgent => PrimeAgentSessionReader.Records(
-                new[] { Path.Combine(_vsCodeHome, ".prime", "agent", "sessions"),
-                        Path.Combine(_vsCodeHome, ".prime", "agent", "session-artifacts") }),
+                PrimeAgentSessionReader.Roots(_vsCodeHome)),
             TranscriptKind.RooCode => VsCodeTaskLogReader.AllClients(_vsCodeHome),
             TranscriptKind.Codebuddy => new[] { "codebuddy", "workbuddy" }
                 .SelectMany(client => TencentBuddyReader.Records(client, _vsCodeHome)).ToList(),
@@ -210,6 +275,7 @@ public partial class TokenSpendWindow : Window
             TranscriptKind.KimiCli => LegacyStores.KimiRecords(_vsCodeHome),
             TranscriptKind.DevinDesktop => DevinDesktopReader.Records(_vsCodeHome),
             TranscriptKind.AntigravityCli => AntigravityCliReader.Records(_vsCodeHome),
+            TranscriptKind.AntigravityIde => AntigravityCliReader.Records(_vsCodeHome, client: "antigravity-ide"),
             _ => Array.Empty<AgentUsageRecord>(),
         };
         var built = AgentUsageLedger.Build(records, _prices ?? ModelPrices.Empty);
@@ -221,10 +287,28 @@ public partial class TokenSpendWindow : Window
                 Project = s.Project ?? "",
                 TokensText = s.Tokens.ToString("N0"),
                 EndText = s.End.ToLocalTime().ToString("MMM d HH:mm"),
+                EndSort = s.End,
             })
             .ToList();
         RenderSummary();
         RenderChart();
+    }
+
+    private static string FormatReport(SpendReading.Report report)
+    {
+        if (report.Sources.Count == 0) return "";
+        return string.Join(Environment.NewLine, report.Sources.Select(source =>
+        {
+            var models = source.Models.Count == 0
+                ? ""
+                : " " + string.Join(", ", source.Models.Select(model =>
+                    model.PricedAmount is { } amount
+                        ? $"{model.Model} {model.Tokens} (${amount:0.00})"
+                        : $"{model.Model} {model.Tokens} unpriced {model.UnpricedTokens}"));
+            return source.Recognized && source.Tokens == 0 && source.Models.Count == 0
+                ? $"{source.SourceId}: recognized, no token records"
+                : $"{source.SourceId}: {source.Tokens} tokens{models}";
+        }));
     }
 
     // --- Summary -----------------------------------------------------------------
@@ -262,7 +346,9 @@ public partial class TokenSpendWindow : Window
         {
             ChartCanvas.Children.Add(new TextBlock
             {
-                Text = "No transcripts found. Sessions scanned from the CLI appear here.",
+                Text = UiLanguage.IsChinese
+                    ? "未找到会话记录。CLI 会话扫描后会出现在这里。"
+                    : "No transcripts found. Sessions scanned from the CLI appear here.",
                 Foreground = MutedBrush(),
                 Margin = new Thickness(8),
             });
@@ -270,9 +356,12 @@ public partial class TokenSpendWindow : Window
         }
 
         var maxTokens = Math.Max(1, _ledger.Days.Max(day => day.Tokens));
-        var width = ChartCanvas.ActualWidth;
-        var height = ChartCanvas.ActualHeight;
-        if (width <= 0 || height <= 0) return;
+        // Actual size is 0 until the window is laid out. A reading still has to
+        // draw; the resize handler paints again at the real width.
+        var width = ChartCanvas.ActualWidth > 0 ? ChartCanvas.ActualWidth
+            : (double.IsNaN(ChartCanvas.Width) || ChartCanvas.Width <= 0 ? 480 : ChartCanvas.Width);
+        var height = ChartCanvas.ActualHeight > 0 ? ChartCanvas.ActualHeight
+            : (double.IsNaN(ChartCanvas.Height) || ChartCanvas.Height <= 0 ? 180 : ChartCanvas.Height);
 
         var barAndGap = width / _ledger.Days.Count;
         var barWidth = Math.Max(2, barAndGap * 0.7);
@@ -371,10 +460,11 @@ public partial class TokenSpendWindow : Window
                 Project = project ?? "",
                 TokensText = tokens.ToString("N0"),
                 EndText = end?.ToLocalTime().ToString("MMM d HH:mm") ?? "",
+                EndSort = end ?? DateTimeOffset.MinValue,
             });
         }
 
-        SessionList.ItemsSource = rows.OrderByDescending(row => row.EndText).ToList();
+        SessionList.ItemsSource = rows.OrderByDescending(row => row.EndSort).ToList();
     }
 
     public sealed record SessionRow
@@ -383,13 +473,12 @@ public partial class TokenSpendWindow : Window
         public string Project { get; init; } = "";
         public string TokensText { get; init; } = "";
         public string EndText { get; init; } = "";
+        public DateTimeOffset EndSort { get; init; }
     }
 
     // --- Brushes -----------------------------------------------------------------------
 
-    private static System.Windows.Media.Brush ProgressBrush() =>
-        (System.Windows.Application.Current?.TryFindResource("RingProgress") as System.Windows.Media.Brush)
-        ?? System.Windows.Media.Brushes.SteelBlue;
+    private static System.Windows.Media.Brush ProgressBrush() => UsagePaint.BrushFor(0.2, false);
 
     private static System.Windows.Media.Brush MutedBrush() =>
         (System.Windows.Application.Current?.TryFindResource("MutedForeground") as System.Windows.Media.Brush)

@@ -1,4 +1,6 @@
 using Pulse.Auth;
+using Pulse.Core.Accounts;
+using Pulse.Core.Providers;
 using Xunit;
 
 namespace Pulse.Core.Tests;
@@ -51,14 +53,66 @@ public class OAuthFlowTests
     [Fact]
     public void Claude_Authorize_Url_Carries_The_Narrow_Scope_And_State()
     {
-        var login = new ClaudeLoopbackLogin(port: 41599);
+        var login = new ClaudeLoopbackLogin(); // ephemeral port
         var url = login.BuildAuthorizeUrl("state-abc");
 
         Assert.Contains("client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e", url);
         Assert.Contains("scope=user%3Aprofile", url); // user:profile ONLY
         Assert.Contains("state=state-abc", url);
         Assert.Contains("code=true", url); // the CLI's extra authorize item
-        Assert.Contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A41599%2Fcallback", url);
+        Assert.Contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A", url);
+        Assert.Contains("%2Fcallback", url);
+    }
+
+    [Fact]
+    public void Claude_Authorize_Url_Carries_Pkce_Challenge()
+    {
+        var login = new ClaudeLoopbackLogin(); // ephemeral port
+        var (_, challenge) = Pkce.Create();
+        var url = login.BuildAuthorizeUrl("state-abc", challenge);
+
+        Assert.Contains("code_challenge=" + Uri.EscapeDataString(challenge), url);
+        Assert.Contains("code_challenge_method=S256", url);
+    }
+
+    [Fact]
+    public void GitHub_Token_Request_Sends_The_Device_Code()
+    {
+        var prompt = new DevicePrompt(
+            "ABCD-1234",
+            "https://github.com/login/device",
+            TimeSpan.FromSeconds(5),
+            DeviceCode: "device-handle");
+        var fields = GitHubDeviceLogin.TokenFields(prompt);
+
+        Assert.Equal("device-handle", fields["device_code"]);
+        Assert.DoesNotContain("http", fields["device_code"]);
+        Assert.NotEqual(prompt.UserCode, fields["device_code"]);
+    }
+
+    [Fact]
+    public void Grok_Poll_Requires_The_Device_Code_Handle()
+    {
+        var prompt = new DevicePrompt("USER-CODE", "https://auth.x.ai/device", TimeSpan.FromSeconds(5), DeviceCode: "handle-1");
+        Assert.Equal("handle-1", GrokDeviceLogin.RequireDeviceCode(prompt));
+        Assert.Throws<InvalidOperationException>(() =>
+            GrokDeviceLogin.RequireDeviceCode(prompt with { DeviceCode = null }));
+    }
+
+    [Fact]
+    public void Refreshing_Store_Unwraps_A_Live_OAuth_Bundle()
+    {
+        var inner = new InMemoryCredentialStore();
+        var tokens = new OAuthTokens("access-token", "refresh-token", DateTimeOffset.UtcNow.AddHours(1));
+        inner.SetSecret(ProviderId.Grok, "Grok#slot", tokens.Serialize());
+        inner.SetSecret(ProviderId.DeepSeek, "DeepSeek", "sk-plain");
+
+        var store = new RefreshingCredentialStore(inner);
+
+        Assert.Equal("access-token", store.GetSecret(ProviderId.Grok, "Grok#slot"));
+        Assert.Equal("sk-plain", store.GetSecret(ProviderId.DeepSeek, "DeepSeek"));
+        // The vault still holds the bundle, refresh token included.
+        Assert.Contains("refresh-token", inner.GetSecret(ProviderId.Grok, "Grok#slot"));
     }
 
     [Fact]

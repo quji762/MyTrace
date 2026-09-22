@@ -34,40 +34,57 @@ public sealed class CodexProvider : HttpUsageProviderBase
     public override ProviderCapabilities Capabilities => ProviderCapabilities.For(ProviderId.Codex);
     protected override string Endpoint => EndpointUrl;
 
-    private (string Token, string AccountID)? Borrowed;
+    // Per-call context: concurrent primary/added reads must not share one
+    // ChatGPT-Account-Id. AsyncLocal flows with the read's async chain.
+    private static readonly AsyncLocal<(string Token, string AccountID)?> Borrowed = new();
+    private readonly object _appServerGate = new();
     private CodexAppServerClient? _appServer;
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var pasted = _credentialResolver(account.Label);
-        if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        var pasted = _credentialResolver(account.AccountId);
+        if (!string.IsNullOrWhiteSpace(pasted))
+        {
+            // A vault token is not the CLI login. Leaving Borrowed set would
+            // attach the CLI's ChatGPT-Account-Id to somebody else's token.
+            Borrowed.Value = null;
+            return pasted.Trim();
+        }
 
-        Borrowed = _cliCredentialsLocator?.Invoke() ?? LocateCliCredentials();
-        return Borrowed?.Token;
+        if (!AccountScope.IsPrimary(account))
+        {
+            Borrowed.Value = null;
+            return null;
+        }
+
+        Borrowed.Value = _cliCredentialsLocator?.Invoke() ?? LocateCliCredentials();
+        return Borrowed.Value?.Token;
     }
 
     public override async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
-        var result = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
+        var endpoint = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
 
-        // No usable token, or the stored one was refused: the app server can
-        // still answer — it is signed in on its own terms and renews its own
-        // credentials. Pinned to the endpoint, a dead token is reported rather
-        // than quietly answered; automatic falls through to the fallback.
-        var needsFallback = result.Health is ProviderReadHealth.CredentialExpired or ProviderReadHealth.Unauthorized;
-        if (!needsFallback) return result;
-
-        return await FetchViaAppServerAsync(account, context).ConfigureAwait(false);
+        // Pinned to the endpoint, a dead token is reported rather than quietly
+        // answered by the app server. Pinned to the app server, an endpoint
+        // success is not the reading.
+        return await RoutePinning.SelectAsync(account.Pin, endpoint, async () =>
+        {
+            if (!AccountScope.IsPrimary(account))
+                return ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "app-server unavailable");
+            return await FetchViaAppServerAsync(account, context, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 
     /// <summary>The `codex app-server` fallback: the CLI's own documented protocol.</summary>
-    private async Task<ProviderReadResult> FetchViaAppServerAsync(MonitoredAccount account, ProviderReadContext context)
+    private async Task<ProviderReadResult> FetchViaAppServerAsync(MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
         try
         {
-            _appServer ??= new CodexAppServerClient();
-            var rateLimits = await _appServer.RateLimitsAsync(CancellationToken.None).ConfigureAwait(false);
+            lock (_appServerGate)
+                _appServer ??= new CodexAppServerClient();
+            var rateLimits = await _appServer.RateLimitsAsync(cancellationToken).ConfigureAwait(false);
             var usage = CodexMapping.ParseAppServerResponse(rateLimits, account.AccountId, context.Now);
             return usage.Windows.Count > 0
                 ? ProviderReadResult.Ok(usage with { Origin = UsageRoute.AppServer })
@@ -108,7 +125,7 @@ public sealed class CodexProvider : HttpUsageProviderBase
         // Sent only when there is one. An empty header is not the same as no
         // header: it names no account, and on an added account the service could
         // answer for the OTHER login's figures.
-        if (Borrowed is { } borrowed && borrowed.AccountID.Length > 0)
+        if (Borrowed.Value is { } borrowed && borrowed.AccountID.Length > 0)
             request.Headers.TryAddWithoutValidation("ChatGPT-Account-Id", borrowed.AccountID);
         return request;
     }

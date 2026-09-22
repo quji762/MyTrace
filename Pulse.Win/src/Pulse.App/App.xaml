@@ -3,13 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <SolidColorBrush x:Key="RailBackground" Color="#E8141414" />
-        <SolidColorBrush x:Key="RailForeground" Color="#FFF2F2F2" />
-        <SolidColorBrush x:Key="RingTrack" Color="#33FFFFFF" />
-        <SolidColorBrush x:Key="RingProgress" Color="#FF4C8BF5" />
-        <SolidColorBrush x:Key="RingExhausted" Color="#FFE5484D" />
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource RailForeground}" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/PulseStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

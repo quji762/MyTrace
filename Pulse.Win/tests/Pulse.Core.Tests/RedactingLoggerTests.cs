@@ -70,7 +70,7 @@ public class RedactingLoggerTests
         var disabled = new RedactingLogger(new[] { disabledSink }, debugEnabled: false);
         enabled.Debug("debug line");
         disabled.Debug("debug line");
-        Assert.Equal(1, enabledSink.Lines.Count);
+        Assert.Single(enabledSink.Lines);
         Assert.Empty(disabledSink.Lines);
         Assert.Contains("debug line", enabledSink.Lines[0]);
     }

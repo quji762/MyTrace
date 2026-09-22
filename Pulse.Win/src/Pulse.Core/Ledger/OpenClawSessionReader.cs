@@ -20,14 +20,26 @@ namespace Pulse.Core.Ledger;
 /// `gateway-injected`) are skipped: they are all-zero bookkeeping, not a real
 /// zero-usage call. Codex app-server rollups mirrored under an agent and .zst
 /// archives are not read here.
+///
+/// The product has been renamed twice; the same store shapes live under
+/// `~/.clawdbot`, `~/.moltbot` and `~/.moldbot` as well as `~/.openclaw`, and
+/// every existing root is scanned. Cross-store identity still collapses an
+/// import that left the same event in two trees.
 /// </summary>
 public static class OpenClawSessionReader
 {
+    /// <summary>Current and legacy product directories, under the user home.</summary>
+    public static readonly IReadOnlyList<string> ProductDirectories =
+        new[] { ".openclaw", ".clawdbot", ".moltbot", ".moldbot" };
+
     public static IReadOnlyList<AgentUsageRecord> Records(string? userProfile = null)
     {
         var home = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var root = Path.Combine(home, ".openclaw");
-        return !Directory.Exists(root) ? Array.Empty<AgentUsageRecord>() : RecordsFromRoots(new[] { root });
+        if (string.IsNullOrEmpty(home)) return Array.Empty<AgentUsageRecord>();
+        var roots = ProductDirectories
+            .Select(name => Path.Combine(home, name))
+            .ToArray();
+        return roots.Any(Directory.Exists) ? RecordsFromRoots(roots) : Array.Empty<AgentUsageRecord>();
     }
 
     public static IReadOnlyList<AgentUsageRecord> RecordsFromRoots(IEnumerable<string> roots)
@@ -89,7 +101,7 @@ public static class OpenClawSessionReader
                         string? rowJson = reader.GetString(2);
 
                         JsonElement? rowMaybe = null;
-                        try { rowMaybe = JsonDocument.Parse(rowJson).RootElement.Clone(); }
+                        try { using var doc = JsonDocument.Parse(rowJson); rowMaybe = doc.RootElement.Clone(); }
                         catch (JsonException) { }
                         if (rowMaybe is not { } row || row.ValueKind != JsonValueKind.Object) continue;
 
@@ -184,7 +196,7 @@ public static class OpenClawSessionReader
                     var line = lines[index];
                     if (string.IsNullOrWhiteSpace(line)) continue;
                     JsonElement? rowMaybe = null;
-                    try { rowMaybe = JsonDocument.Parse(line).RootElement.Clone(); }
+                    try { using var doc = JsonDocument.Parse(line); rowMaybe = doc.RootElement.Clone(); }
                     catch (JsonException) { }
                     if (rowMaybe is not { } row || row.ValueKind != JsonValueKind.Object) continue;
 

@@ -36,7 +36,7 @@ public sealed class OllamaCloudProvider : HttpUsageProviderBase
     protected override string Endpoint => SettingsUrl;
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     protected override HttpRequestMessage BuildRequest(string credential)
     {
@@ -88,9 +88,9 @@ public sealed class OllamaCloudProvider : HttpUsageProviderBase
             var windows = new List<UsageWindow>
             {
                 new("ollama.session", UsageWindowKind.FiveHour, null, snapshot.Session.UsedFraction,
-                    5 * 3600, snapshot.Session.ResetsAt, IsExhausted: snapshot.Session.UsedFraction >= 1),
+                    5 * 3600, snapshot.Session.ResetsAt, IsExhausted: false),
                 new("ollama.weekly", UsageWindowKind.Weekly, null, snapshot.Weekly.UsedFraction,
-                    7 * 86400, snapshot.Weekly.ResetsAt, IsExhausted: snapshot.Weekly.UsedFraction >= 1),
+                    7 * 86400, snapshot.Weekly.ResetsAt, IsExhausted: false),
             };
             return ProviderReadResult.Ok(new ProviderUsage(
                 ProviderId.OllamaCloud, account.AccountId, windows, context.Now,

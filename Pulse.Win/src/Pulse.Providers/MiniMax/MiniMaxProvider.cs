@@ -46,7 +46,7 @@ public sealed class MiniMaxProvider : HttpUsageProviderBase
     ];
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     // The base class sends one request to `Endpoint`; the fallback to the older
     // path lives here by overriding ReadAsync to try both paths on any failure,

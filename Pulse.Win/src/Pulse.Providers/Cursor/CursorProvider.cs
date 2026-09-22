@@ -4,6 +4,7 @@ using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
 using Pulse.Providers.Internal;
+using Pulse.Providers.Local;
 
 namespace Pulse.Providers.Cursor;
 
@@ -18,9 +19,9 @@ namespace Pulse.Providers.Cursor;
 /// Billing model facts the parser depends on:
 /// - The plan includes TWO pools (Cursor Models / Other Models), reported as
 ///   percentages; Grok Bot is a separate provider and is not read here.
-/// - `autoPercentUsed` 0.0267 means 0.0267%, NOT 2.67% â€” a fraction would be a
+/// - `autoPercentUsed` 0.0267 means 0.0267%, NOT 2.67% â€?a fraction would be a
 ///   hundredfold overstatement (settled by arithmetic upstream).
-/// - Pools' 30 days are a sort key (billing cycles run 28â€“31 days):
+/// - Pools' 30 days are a sort key (billing cycles run 28â€?1 days):
 ///   ReportsLength stays false.
 /// </summary>
 public sealed class CursorProvider : HttpUsageProviderBase
@@ -41,7 +42,15 @@ public sealed class CursorProvider : HttpUsageProviderBase
     /// <summary>The pasted value may be the raw token or a full cookie header.</summary>
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var stored = _credentialResolver(account.Label);
+        var stored = _credentialResolver(account.AccountId);
+        if (string.IsNullOrWhiteSpace(stored))
+        {
+            if (!AccountScope.IsPrimary(account)) return null;
+            var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var database = Path.Combine(roaming, "Cursor", "User", "globalStorage", "state.vscdb");
+            stored = CursorEditorLogin.SessionCookie(database, DateTimeOffset.UtcNow);
+        }
+
         if (string.IsNullOrWhiteSpace(stored)) return null;
 
         var value = stored.Trim();
@@ -57,7 +66,7 @@ public sealed class CursorProvider : HttpUsageProviderBase
         {
             // The credential travels as a named cookie, not an Authorization header.
             // (Header injection guard: a stored value containing a newline never
-            // reaches here â€” TryAddWithoutValidation would drop the request.)
+            // reaches here â€?TryAddWithoutValidation would drop the request.)
             ["Cookie"] = $"WorkosCursorSessionToken={Uri.EscapeDataString(CredentialValue!)}",
         };
 
@@ -139,11 +148,11 @@ public static class CursorMapping
             Kind: UsageWindowKind.Monthly,
             Scope: scope,
             UsedFraction: Math.Clamp(percent.Value / 100, 0, 1),
-            // A billing cycle runs 28â€“31 days; thirty only orders the rows.
+            // A billing cycle runs 28â€?1 days; thirty only orders the rows.
             WindowSeconds: 30 * 86400,
             ResetsAt: resets,
             ReportsLength: false,
-            IsExhausted: percent >= 100);
+            IsExhausted: false);
     }
 
     /// <summary>A pot measured in money (cents) rather than as a share of a pool.</summary>
@@ -164,7 +173,7 @@ public static class CursorMapping
             WindowSeconds: 30 * 86400,
             ResetsAt: resets,
             ReportsLength: false,
-            IsExhausted: used >= limit);
+            IsExhausted: false);
     }
 
     /// <summary>What is left of the plan's allowance, in dollars (reply carries cents).</summary>
@@ -174,7 +183,7 @@ public static class CursorMapping
         return Num(plan, "remaining");
     }
 
-    /// <summary>"pro_plus" â†’ "Pro+". Unfamiliar tiers tidied and passed through.</summary>
+    /// <summary>"pro_plus" â†?"Pro+". Unfamiliar tiers tidied and passed through.</summary>
     public static string? PlanName(string? membership)
     {
         if (string.IsNullOrEmpty(membership)) return null;

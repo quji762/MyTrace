@@ -1,35 +1,48 @@
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Win32.SafeHandles;
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 
 namespace Pulse.Storage;
 
 /// <summary>
-/// The credential vault: structured secrets (one JSON bundle per provider) encrypted
-/// with DPAPI CurrentUser and written under %LOCALAPPDATA%\PulseWin\vault.
-/// CurrentUser-encrypted content only the current user can decrypt (the .NET docs
-/// list passwords/keys as the canonical use). Machine-serial key derivation is
-/// explicitly forbidden, as is plaintext JSON — see the migration guide's security table.
-/// Windows Credential Manager (CredWrite/CredRead) holds the master wrapping key so
-/// the vault file alone is useless on another machine or another Windows user.
+/// The credential vault: one DPAPI CurrentUser blob per provider, holding every
+/// account slot for that provider. CurrentUser already binds the blob to this
+/// Windows user. A random key in Credential Manager is supplied as DPAPI entropy,
+/// so the file alone is not enough even for the same user profile copied elsewhere
+/// without that key. Machine-serial derivation and plaintext JSON are not used.
 /// </summary>
 public sealed class DpapiCredentialStore : ICredentialStore
 {
-    private static readonly string VaultDirectory = Path.Combine(
+    private static readonly string DefaultDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PulseWin", "vault");
 
+    private readonly string _directory;
+    private readonly Func<byte[]?> _entropy;
     private readonly object _lock = new();
+
+    public DpapiCredentialStore()
+        : this(null, null)
+    {
+    }
+
+    /// <param name="directory">Vault folder. Tests pass a temp directory.</param>
+    /// <param name="entropy">Wrapping key. Null uses Credential Manager; a func that returns null skips entropy.</param>
+    public DpapiCredentialStore(string? directory, Func<byte[]?>? entropy)
+    {
+        _directory = directory ?? DefaultDirectory;
+        _entropy = entropy ?? CredentialManagerStore.GetOrCreateEntropy;
+    }
 
     public string? GetSecret(ProviderId provider, string accountId)
     {
         lock (_lock)
         {
-            var entry = ReadEntry(provider);
-            return entry?.Secret;
+            var secrets = Load(provider);
+            return secrets.TryGetValue(accountId, out var secret) ? secret : null;
         }
     }
 
@@ -37,14 +50,9 @@ public sealed class DpapiCredentialStore : ICredentialStore
     {
         lock (_lock)
         {
-            var entry = new VaultEntry
-            {
-                Provider = provider.ToString(),
-                AccountId = accountId,
-                Secret = secret,
-                UpdatedAt = DateTimeOffset.Now,
-            };
-            WriteEntry(provider, entry);
+            var secrets = Load(provider);
+            secrets[accountId] = secret;
+            Save(provider, secrets);
         }
     }
 
@@ -52,86 +60,157 @@ public sealed class DpapiCredentialStore : ICredentialStore
     {
         lock (_lock)
         {
-            var path = EntryPath(provider);
-            if (File.Exists(path)) File.Delete(path);
+            var secrets = Load(provider);
+            if (!secrets.Remove(accountId)) return;
+            if (secrets.Count == 0)
+            {
+                var path = EntryPath(provider);
+                if (File.Exists(path)) File.Delete(path);
+                return;
+            }
+
+            Save(provider, secrets);
         }
     }
 
     public static bool IsWindowsSupported() =>
         OperatingSystem.IsWindows();
 
-    // --- Per-provider encrypted entries -----------------------------------------
+    private string EntryPath(ProviderId provider) =>
+        Path.Combine(_directory, $"{provider}.bin");
 
-    private static string EntryPath(ProviderId provider) =>
-        Path.Combine(VaultDirectory, $"{provider}.bin");
-
-    private sealed record VaultEntry
-    {
-        public string Provider { get; init; } = "";
-        public string AccountId { get; init; } = "";
-        public string Secret { get; init; } = "";
-        public DateTimeOffset UpdatedAt { get; init; }
-    }
-
-    private static VaultEntry? ReadEntry(ProviderId provider)
+    private Dictionary<string, string> Load(ProviderId provider)
     {
         var path = EntryPath(provider);
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path)) return new Dictionary<string, string>();
 
         try
         {
-            var encrypted = File.ReadAllBytes(path);
-            var plaintext = ProtectedData.Unprotect(encrypted);
+            var plaintext = ProtectedData.Unprotect(File.ReadAllBytes(path), _entropy());
             var json = Encoding.UTF8.GetString(plaintext);
-            return JsonSerializer.Deserialize<VaultEntry>(json);
+            var (secrets, legacy) = Parse(json, provider);
+            if (legacy)
+            {
+                try { Save(provider, secrets); }
+                catch (Exception) { /* the old blob still reads; rewrite on the next save */ }
+            }
+
+            return secrets;
         }
         catch (Exception)
         {
-            // A corrupted or foreign-user entry is not a credential; treat as absent
-            // rather than crashing the refresh pass.
-            return null;
+            // A corrupted or foreign-user entry is not a credential.
+            return new Dictionary<string, string>();
         }
     }
 
-    private static void WriteEntry(ProviderId provider, VaultEntry entry)
+    private void Save(ProviderId provider, Dictionary<string, string> secrets)
     {
-        Directory.CreateDirectory(VaultDirectory);
-        var plaintext = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(entry));
-        var encrypted = ProtectedData.Protect(plaintext);
+        Directory.CreateDirectory(_directory);
+        var json = JsonSerializer.Serialize(new VaultBundle(secrets));
+        var encrypted = ProtectedData.Protect(Encoding.UTF8.GetBytes(json), _entropy());
         File.WriteAllBytes(EntryPath(provider), encrypted);
     }
+
+    /// <summary>
+    /// Current shape is <c>{"Secrets":{accountId: secret}}</c>. The previous file
+    /// was one <c>VaultEntry</c> and is read as that account's secret.
+    /// </summary>
+    private static (Dictionary<string, string> Secrets, bool Legacy) Parse(string json, ProviderId provider)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            return (new Dictionary<string, string>(), false);
+
+        if (root.TryGetProperty("Secrets", out var secrets) && secrets.ValueKind == JsonValueKind.Object)
+        {
+            var map = new Dictionary<string, string>();
+            foreach (var property in secrets.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.String && property.Value.GetString() is { } value)
+                    map[property.Name] = value;
+            }
+
+            return (map, false);
+        }
+
+        if (root.TryGetProperty("Secret", out var secret) && secret.ValueKind == JsonValueKind.String
+            && secret.GetString() is { } legacySecret)
+        {
+            var id = root.TryGetProperty("AccountId", out var account)
+                     && account.ValueKind == JsonValueKind.String
+                     && !string.IsNullOrEmpty(account.GetString())
+                ? account.GetString()!
+                : provider.ToString();
+            return (new Dictionary<string, string> { [id] = legacySecret }, true);
+        }
+
+        return (new Dictionary<string, string>(), false);
+    }
+
+    private sealed record VaultBundle(Dictionary<string, string> Secrets);
 }
 
 /// <summary>
-/// Minimal Windows Credential Manager interop (CredRead/CredWrite/CredDelete), used
-/// as the preferred store for simple API-key secrets per the migration guide.
-/// The target name names the provider so nothing but this app's entries are touched.
+/// Windows Credential Manager (CredRead/CredWrite/CredDelete). The vault's
+/// entropy key lives here. Per-account targets are available for callers that
+/// store a secret directly; the primary account still reads a legacy target
+/// written before account ids were part of the name.
 /// </summary>
 public sealed class CredentialManagerStore : ICredentialStore
 {
     private const string TargetPrefix = "PulseWin.";
+    private const string EntropyTarget = "PulseWin.VaultEntropy";
 
     public string? GetSecret(ProviderId provider, string accountId)
     {
         if (!OperatingSystem.IsWindows()) return null;
-        return CredRead(TargetName(provider));
+        return CredRead(TargetName(provider, accountId))
+               ?? (accountId == provider.ToString() ? CredRead(LegacyTarget(provider)) : null);
     }
 
     public void SetSecret(ProviderId provider, string accountId, string secret)
     {
         if (!OperatingSystem.IsWindows()) return;
-        CredWrite(TargetName(provider), secret);
+        CredWrite(TargetName(provider, accountId), secret);
     }
 
     public void RemoveSecret(ProviderId provider, string accountId)
     {
         if (!OperatingSystem.IsWindows()) return;
-        CredDelete(TargetName(provider));
+        CredDelete(TargetName(provider, accountId));
+        if (accountId == provider.ToString())
+            CredDelete(LegacyTarget(provider));
     }
 
-    private static string TargetName(ProviderId provider) => TargetPrefix + provider;
+    /// <summary>32 random bytes stored once. Null when Credential Manager cannot be written.</summary>
+    public static byte[]? GetOrCreateEntropy()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        try
+        {
+            var existing = CredRead(EntropyTarget);
+            if (!string.IsNullOrEmpty(existing))
+            {
+                var parsed = Convert.FromBase64String(existing);
+                if (parsed.Length > 0) return parsed;
+            }
 
-    // --- interop ----------------------------------------------------------------
+            var created = RandomNumberGenerator.GetBytes(32);
+            CredWrite(EntropyTarget, Convert.ToBase64String(created));
+            return created;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string TargetName(ProviderId provider, string accountId) =>
+        TargetPrefix + provider + "." + accountId;
+
+    private static string LegacyTarget(ProviderId provider) => TargetPrefix + provider;
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CredReadW")]
     private static extern bool CredRead(string target, uint type, uint reservedFlag, out IntPtr credentialPtr);
@@ -215,18 +294,31 @@ public sealed class CredentialManagerStore : ICredentialStore
     }
 }
 
-/// <summary>Native DPAPI entry point (System.Security.Cryptography.ProtectedData
-/// equivalent, kept dependency-light here).</summary>
-internal static class ProtectedData
+/// <summary>
+/// Native DPAPI (crypt32). Optional entropy is the Credential Manager wrapping key.
+/// Input buffers are freed on every path, including failure. Output from
+/// CryptProtectData is released with LocalFree.
+/// </summary>
+public static class ProtectedData
 {
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool CryptProtectData(
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CryptProtectData")]
+    private static extern bool CryptProtectPlain(
         ref DATA_BLOB pDataIn, string? szDataDescr, IntPtr pOptionalEntropy,
         IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, out DATA_BLOB pDataOut);
 
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool CryptUnprotectData(
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CryptProtectData")]
+    private static extern bool CryptProtectEntropy(
+        ref DATA_BLOB pDataIn, string? szDataDescr, ref DATA_BLOB pOptionalEntropy,
+        IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, out DATA_BLOB pDataOut);
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CryptUnprotectData")]
+    private static extern bool CryptUnprotectPlain(
         ref DATA_BLOB pDataIn, IntPtr ppszDataDescr, IntPtr pOptionalEntropy,
+        IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, out DATA_BLOB pDataOut);
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CryptUnprotectData")]
+    private static extern bool CryptUnprotectEntropy(
+        ref DATA_BLOB pDataIn, IntPtr ppszDataDescr, ref DATA_BLOB pOptionalEntropy,
         IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, out DATA_BLOB pDataOut);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -238,33 +330,85 @@ internal static class ProtectedData
 
     private const uint CRYPTPROTECT_UI_FORBIDDEN = 0x1;
 
-    public static byte[] Protect(byte[] plaintext)
+    public static byte[] Protect(byte[] plaintext, byte[]? entropy = null)
     {
-        var input = FromByteArray(plaintext);
-        if (!CryptProtectData(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
-                CRYPTPROTECT_UI_FORBIDDEN, out var output) || output.pbData == IntPtr.Zero)
-            throw new InvalidOperationException("DPAPI protect failed");
-        return ToByteArray(output);
+        var input = Alloc(plaintext);
+        var extra = Alloc(entropy);
+        try
+        {
+            DATA_BLOB output;
+            bool ok;
+            if (extra.pbData != IntPtr.Zero)
+            {
+                var copy = extra;
+                ok = CryptProtectEntropy(ref input, null, ref copy, IntPtr.Zero, IntPtr.Zero,
+                    CRYPTPROTECT_UI_FORBIDDEN, out output);
+            }
+            else
+            {
+                ok = CryptProtectPlain(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
+                    CRYPTPROTECT_UI_FORBIDDEN, out output);
+            }
+
+            if (!ok || output.pbData == IntPtr.Zero)
+                throw new InvalidOperationException("DPAPI protect failed");
+            return Read(output);
+        }
+        finally
+        {
+            Free(input);
+            Free(extra);
+        }
     }
 
-    public static byte[] Unprotect(byte[] encrypted)
+    /// <summary>
+    /// Decrypt. When <paramref name="entropy"/> is set, a blob written before the
+    /// wrapping key existed is still accepted (the call without entropy).
+    /// </summary>
+    public static byte[] Unprotect(byte[] encrypted, byte[]? entropy = null)
     {
-        var input = FromByteArray(encrypted);
-        if (!CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
-                CRYPTPROTECT_UI_FORBIDDEN, out var output) || output.pbData == IntPtr.Zero)
+        var input = Alloc(encrypted);
+        var extra = Alloc(entropy);
+        try
+        {
+            if (extra.pbData != IntPtr.Zero)
+            {
+                var copy = extra;
+                if (CryptUnprotectEntropy(ref input, IntPtr.Zero, ref copy, IntPtr.Zero, IntPtr.Zero,
+                        CRYPTPROTECT_UI_FORBIDDEN, out var withKey)
+                    && withKey.pbData != IntPtr.Zero)
+                    return Read(withKey);
+            }
+
+            if (CryptUnprotectPlain(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
+                    CRYPTPROTECT_UI_FORBIDDEN, out var plain)
+                && plain.pbData != IntPtr.Zero)
+                return Read(plain);
+
             throw new InvalidOperationException("DPAPI unprotect failed");
-        return ToByteArray(output);
+        }
+        finally
+        {
+            Free(input);
+            Free(extra);
+        }
     }
 
-    private static DATA_BLOB FromByteArray(byte[] data)
+    private static DATA_BLOB Alloc(byte[]? data)
     {
-        var blob = new DATA_BLOB { cbData = data.Length };
-        blob.pbData = Marshal.AllocHGlobal(data.Length);
-        Marshal.Copy(data, 0, blob.pbData, data.Length);
-        return blob;
+        if (data is not { Length: > 0 }) return default;
+        var ptr = Marshal.AllocHGlobal(data.Length);
+        Marshal.Copy(data, 0, ptr, data.Length);
+        return new DATA_BLOB { cbData = data.Length, pbData = ptr };
     }
 
-    private static byte[] ToByteArray(DATA_BLOB blob)
+    private static void Free(DATA_BLOB blob)
+    {
+        if (blob.pbData != IntPtr.Zero)
+            Marshal.FreeHGlobal(blob.pbData);
+    }
+
+    private static byte[] Read(DATA_BLOB blob)
     {
         try
         {
@@ -274,6 +418,7 @@ internal static class ProtectedData
         }
         finally
         {
+            // CryptProtectData allocates with LocalAlloc. FreeHGlobal calls LocalFree.
             Marshal.FreeHGlobal(blob.pbData);
         }
     }

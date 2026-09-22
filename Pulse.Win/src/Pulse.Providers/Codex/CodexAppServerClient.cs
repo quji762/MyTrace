@@ -12,7 +12,7 @@ namespace Pulse.Providers.Codex;
 /// HTTP endpoint. It also pushes `account/rateLimits/updated` when numbers move.
 ///
 /// The cost is a resident child process, started lazily on the first request and
-/// restarted if it dies. EOF on stdout terminates (and kills) the child — a pipe
+/// restarted if it dies. EOF on stdout terminates (and kills) the child �?a pipe
 /// handler left on a closed pipe is a busy loop, the failure mode upstream's
 /// issue #25 was.
 /// </summary>
@@ -80,15 +80,30 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
     private void EnsureRunning()
     {
+        lock (_lock)
+        {
+            EnsureRunningCore();
+        }
+    }
+
+    private void EnsureRunningCore()
+    {
         if (_process is { } existing && !existing.HasExited) return;
 
         // Before starting another one: the last one's reader must not survive.
         _stdin = null;
         _stdout = null;
+        if (_process is { } old)
+        {
+            try { if (!old.HasExited) old.Kill(true); } catch (Exception) { }
+            old.Dispose();
+        }
         _process = null;
         _lineBuffer.Clear();
 
         var executable = LocateCodex() ?? throw new AppServerException(FailureKind.ExecutableNotFound);
+        if (!Path.IsPathRooted(executable))
+            throw new AppServerException(FailureKind.ExecutableNotFound);
 
         var start = new ProcessStartInfo(executable, "app-server")
         {
@@ -111,19 +126,44 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
         var process = started;
         _process = process;
+        if (!_exitHooked)
+        {
+            _exitHooked = true;
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try { if (_process is { HasExited: false } p) p.Kill(entireProcessTree: true); } catch (Exception) { }
+            };
+        }
         _stdin = process.StandardInput;
         _stdout = process.StandardOutput;
+        FailAllPending();
         _nextId = 1;
+
+        // Drain stderr so a chatty child cannot fill the pipe and block.
+        var stderr = process.StandardError;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await stderr.ReadLineAsync().ConfigureAwait(false) is not null)
+                {
+                }
+            }
+            catch (Exception)
+            {
+            }
+        });
 
         _ = Task.Run(async () =>
         {
             try
             {
-                while (_stdout is { } reader)
+                var reader = process.StandardOutput;
+                while (true)
                 {
                     var line = await reader.ReadLineAsync().ConfigureAwait(false);
                     if (line is null) break; // EOF: the helper exited
-                    Consume(line);
+                    Consume(line, process);
                 }
             }
             catch (Exception) { /* the reader is being torn down */ }
@@ -131,6 +171,10 @@ public sealed class CodexAppServerClient : IAsyncDisposable
         });
 
         // The protocol opens with a handshake before anything else is accepted.
+        // Keep the task so RPC callers can await it (fire-and-forget races).
+        var handshakeProcess = process;
+        var handshakeTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handshake = handshakeTcs.Task;
         _ = Task.Run(async () =>
         {
             try
@@ -142,11 +186,35 @@ public sealed class CodexAppServerClient : IAsyncDisposable
                         ["name"] = "PulseWin", ["title"] = "PulseWin", ["version"] = "0.1",
                     },
                 }, CancellationToken.None).ConfigureAwait(false);
+                Notify("initialized");
+                handshakeTcs.TrySetResult(true);
+                handshakeTcs.TrySetResult(true);
             }
-            catch (Exception) { }
+            catch (Exception)
+            {
+                var owned = false;
+                lock (_lock)
+                {
+                    if (ReferenceEquals(_handshake, handshakeTcs.Task))
+                        _handshake = Task.CompletedTask;
+                    if (_process is { } dying && ReferenceEquals(_process, handshakeProcess))
+                    {
+                        owned = true;
+                        _process = null;
+                        _stdin = null;
+                        _stdout = null;
+                        try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
+                        dying.Dispose();
+                    }
+                }
+                if (owned) FailAllPending();
+            }
         });
-        Notify("initialized");
+        
     }
+
+    private bool _exitHooked;
+    private Task _handshake = Task.CompletedTask;
 
     /// <summary>EOF on stdout: the helper has exited, or is exiting. Anything still
     /// waiting is failed now rather than at the timeout, and the handles are dropped
@@ -156,6 +224,11 @@ public sealed class CodexAppServerClient : IAsyncDisposable
         lock (_lock)
         {
             if (!ReferenceEquals(_process, process)) return; // a restart replaced it
+            if (_process is { } dying)
+            {
+                try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
+                dying.Dispose();
+            }
             _process = null;
             _stdin = null;
             _stdout = null;
@@ -166,16 +239,31 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
     private void FailAllPending()
     {
-        foreach (var continuation in _pending.Values)
-            continuation.TrySetException(new AppServerException(FailureKind.StartFailed));
-        _pending.Clear();
+        List<TaskCompletionSource<JsonElement?>> pending;
+        lock (_lock)
+        {
+            pending = _pending.Values.ToList();
+            _pending.Clear();
+        }
+        foreach (var tcs in pending)
+            tcs.TrySetException(new AppServerException(FailureKind.StartFailed));
     }
+
 
     private async Task<JsonElement> SendAsync(string method, CancellationToken cancellationToken)
     {
-        EnsureRunning();
-        var result = await SendCoreAsync(method, new Dictionary<string, object>(), cancellationToken).ConfigureAwait(false);
-        return result ?? JsonSerializer.SerializeToElement(new { });
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            EnsureRunning();
+            var current = _process;
+            await _handshake.ConfigureAwait(false);
+            if (ReferenceEquals(_process, current))
+            {
+                var result = await SendCoreAsync(method, new Dictionary<string, object>(), cancellationToken).ConfigureAwait(false);
+                return result ?? JsonSerializer.SerializeToElement(new { });
+            }
+        }
+        throw new AppServerException(FailureKind.StartFailed);
     }
 
     private async Task<JsonElement?> SendCoreAsync(string method, Dictionary<string, object> parameters, CancellationToken cancellationToken)
@@ -213,7 +301,12 @@ public sealed class CodexAppServerClient : IAsyncDisposable
             // The helper is gone; the next call starts a fresh one.
             lock (_lock)
             {
-                _process = null;
+                if (_process is { } dying)
+            {
+                try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
+                dying.Dispose();
+            }
+            _process = null;
                 _stdin = null;
                 _stdout = null;
             }
@@ -222,6 +315,8 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
         var timeout = Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
         var finished = await Task.WhenAny(completion.Task, timeout).ConfigureAwait(false);
+        if (cancellationToken.IsCancellationRequested)
+            throw new OperationCanceledException(cancellationToken);
         if (finished != completion.Task)
         {
             lock (_lock) _pending.Remove(id);
@@ -251,8 +346,14 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
     /// <summary>Messages arrive as newline-delimited JSON; ReadLineAsync already
     /// hands complete lines, so each one is a message.</summary>
-    private void Consume(string line)
+    private void Consume(string line, Process process)
     {
+        // Stale reader after a restart must not complete the new pending ids.
+        lock (_lock)
+        {
+            if (!ReferenceEquals(_process, process)) return;
+        }
+
         if (line.Length == 0) return;
         JsonDocument document;
         try
@@ -307,6 +408,11 @@ public sealed class CodexAppServerClient : IAsyncDisposable
         {
             try { _process?.Kill(entireProcessTree: true); } catch (Exception) { }
             _process?.Dispose();
+            if (_process is { } dying)
+            {
+                try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
+                dying.Dispose();
+            }
             _process = null;
             _stdin?.Dispose();
             _stdin = null;

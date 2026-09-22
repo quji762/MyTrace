@@ -26,6 +26,7 @@ public sealed record ProviderCapabilities
         ProviderId.Codex => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = true, KeepsLocalTranscripts = true },
         ProviderId.Grok => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = true, KeepsLocalTranscripts = false },
         ProviderId.GrokBot => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = true, KeepsLocalTranscripts = false },
+        ProviderId.Antigravity => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = true, KeepsLocalTranscripts = false },
         ProviderId.DeepSeek => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = true, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
         ProviderId.CommandCode => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = true, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
         ProviderId.KimiCode => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },

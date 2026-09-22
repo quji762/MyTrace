@@ -20,11 +20,12 @@ public static class GeminiSessionReader
 {
     public enum Shape { Session, Headless }
 
-    private static string? _homeOverride;
+    // Settable for tests that need a non-default home without touching the process env.
+    internal static string? HomeOverrideForTests { get; set; }
 
     public static IReadOnlyList<AgentUsageRecord> Records(string? userProfile = null)
     {
-        var home = userProfile ?? _homeOverride ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = userProfile ?? HomeOverrideForTests ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var root = Path.Combine(home, ".gemini");
         return !Directory.Exists(root) ? Array.Empty<AgentUsageRecord>() : RecordsFromRoot(root);
     }

@@ -27,9 +27,19 @@ public sealed class ThresholdAlerts
         _thresholds = thresholds ?? [0.8, 0.95];
     }
 
+    /// <summary>
+    /// One alert arm per window. Two windows on the same account (5-hour and 7-day)
+    /// have different reset times; sharing a key makes each refresh look like a new window.
+    /// </summary>
+    public static string KeyFor(ProviderId provider, string accountId, string windowId) =>
+        $"{provider}:{accountId}:{windowId}";
+
     /// <summary>Feed one window reading. Key must identify window + account.</summary>
     public void Observe(string key, UsageWindow window, DateTimeOffset? now = null)
     {
+        // Off is an empty list. Indexing it would throw on the first reading.
+        if (_thresholds.Length == 0) return;
+
         var at = now ?? DateTimeOffset.Now;
         List<double> crossed = [];
 
@@ -47,7 +57,10 @@ public sealed class ThresholdAlerts
             var rearm = resetMoved;
 
             if (rearm) state = state with { Armed = true };
-            state = state with { LastResetSeen = window.ResetsAt };
+            // Keep a known reset when a later sample omits it — clearing the
+            // timestamp would make the next reset look like the first.
+            if (window.ResetsAt is { } nextReset)
+                state = state with { LastResetSeen = nextReset };
 
             // Provider-flagged exhaustion fires even when percentage disagrees.
             if (window.IsExhausted && state.Armed)

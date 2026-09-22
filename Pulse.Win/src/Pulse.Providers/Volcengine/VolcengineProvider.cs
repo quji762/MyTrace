@@ -1,8 +1,11 @@
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
 using Pulse.Providers.Internal;
+using Pulse.Providers.Local;
 
 namespace Pulse.Providers.Volcengine;
 
@@ -13,7 +16,7 @@ namespace Pulse.Providers.Volcengine;
 /// against Top OpenAPI. Keys preferred over the CLI (account identity: arkcli
 /// carries an ambient SSO session that may be a different account).
 ///
-/// Response shapes are second-hand (CodexBar's parser, upstream fixtures) — the
+/// Response shapes are second-hand (CodexBar's parser, upstream fixtures) �?the
 /// parsing is fixture-covered and the failure copy is specific.
 /// </summary>
 public sealed class VolcengineProvider : HttpUsageProviderBase
@@ -24,10 +27,20 @@ public sealed class VolcengineProvider : HttpUsageProviderBase
         new("https://open.volcengineapi.com/?Action=GetAFPUsage&Version=2024-01-01");
 
     private readonly Func<string?, string?> _credentialResolver;
+    private readonly Func<IEnumerable<string>> _candidates;
+    private readonly Func<string, bool> _canInvoke;
+    private readonly Func<string, CancellationToken, Task<string?>> _runCli;
 
-    public VolcengineProvider(Func<string?, string?>? credentialResolver = null)
+    public VolcengineProvider(
+        Func<string?, string?>? credentialResolver = null,
+        Func<IEnumerable<string>>? candidates = null,
+        Func<string, bool>? canInvoke = null,
+        Func<string, CancellationToken, Task<string?>>? runCli = null)
     {
         _credentialResolver = credentialResolver ?? (key => key);
+        _candidates = candidates ?? CliCandidates;
+        _canInvoke = canInvoke ?? CanInvoke;
+        _runCli = runCli ?? RunCli;
     }
 
     public override ProviderId Id => ProviderId.Volcengine;
@@ -38,15 +51,171 @@ public sealed class VolcengineProvider : HttpUsageProviderBase
     private VolcengineCredentials? Credentials;
     private bool HasUnreadableKey;
 
+    private static IEnumerable<string> CliCandidates()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrEmpty(path))
+        {
+            foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+                yield return Path.Combine(directory, "arkcli.exe");
+        }
+
+        yield return Path.Combine(home, ".local", "bin", "arkcli.exe");
+    }
+
+    private static bool CanInvoke(string path) => File.Exists(path);
+
+    /// <summary>How long <c>arkcli</c> gets before the refresh worker kills it.</summary>
+    private static readonly TimeSpan CliDeadline = TimeSpan.FromSeconds(15);
+
+    /// <summary>Bytes kept from stdout. Past this the pipe is still drained.</summary>
+    private const int OutputCeiling = 512 * 1024;
+
+    /// <summary>
+    /// Both pipes are drained together, and the child is killed when the
+    /// deadline passes. Reading stdout alone deadlocks once stderr fills the
+    /// pipe, and waiting without a bound parks every provider's refresh.
+    /// </summary>
+    private static async Task<string?> RunCli(string executable, CancellationToken cancellationToken)
+    {
+        Process? process = null;
+        Task<byte[]>? stdout = null;
+        Task<byte[]>? stderr = null;
+        try
+        {
+            process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = "usage plan --format json",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            if (!process.Start()) return null;
+            // A prompt gets EOF. Leaving stdin open would park a CLI that asks.
+            try { process.StandardInput.Close(); }
+            catch (Exception) { }
+
+            stdout = Drain(process.StandardOutput.BaseStream, keep: true);
+            stderr = Drain(process.StandardError.BaseStream, keep: false);
+            var pipes = Task.WhenAll(stdout, stderr);
+
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(CliDeadline);
+            var wait = Task.Delay(Timeout.InfiniteTimeSpan, deadline.Token);
+            var completed = await Task.WhenAny(pipes, wait).ConfigureAwait(false);
+            var pipesClosed = completed == pipes && pipes.IsCompletedSuccessfully;
+            if (!pipesClosed)
+                Kill(process);
+            deadline.Cancel();
+            try { await wait.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+
+            if (!pipesClosed)
+            {
+                await Task.WhenAny(pipes, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+                return null;
+            }
+
+            try
+            {
+                using var exitBound = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await process.WaitForExitAsync(exitBound.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                Kill(process);
+                return null;
+            }
+
+            if (!process.HasExited || process.ExitCode != 0) return null;
+            return Encoding.UTF8.GetString(stdout.Result);
+        }
+        catch (Exception)
+        {
+            if (process is not null) Kill(process);
+            return null;
+        }
+        finally
+        {
+            if (stdout is not null && stderr is not null)
+            {
+                await Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(1)))
+                    .ConfigureAwait(false);
+            }
+
+            try { process?.Dispose(); }
+            catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// Read until EOF. Bytes past the ceiling are discarded, not left in the
+    /// pipe �?stopping the read is the same deadlock.
+    /// </summary>
+    private static async Task<byte[]> Drain(Stream stream, bool keep)
+    {
+        var buffer = new byte[8192];
+        using var kept = keep ? new MemoryStream() : null;
+        while (true)
+        {
+            int read;
+            try
+            {
+                read = await stream.ReadAsync(buffer).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                break;
+            }
+
+            if (read == 0) break;
+            if (kept is not null && kept.Length < OutputCeiling)
+            {
+                var take = (int)Math.Min(read, OutputCeiling - kept.Length);
+                kept.Write(buffer, 0, take);
+            }
+        }
+
+        return kept?.ToArray() ?? [];
+    }
+
+    private static void Kill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (Exception)
+        {
+            // Already gone, or the handle cannot be signalled.
+        }
+    }
+
     public override async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
-        var entered = _credentialResolver(account.Label);
-        Credentials = VolcengineCredentials.FromEntered(entered);
+        var entered = _credentialResolver(account.AccountId);
+        var choice = VolcengineAccess.Choose(entered, _candidates(), _canInvoke);
+        Credentials = VolcengineCredentials.FromEntered(VolcengineAccess.IsKeyPair(choice) ? choice : null);
         var enteredNonEmpty = !string.IsNullOrWhiteSpace(entered);
         // Something was pasted and it is not a pair: told apart from nothing
-        // pasted, because the remedies are opposite.
-        HasUnreadableKey = Credentials is null && enteredNonEmpty;
+        // pasted, because the remedies are opposite. A located CLI is not a
+        // malformed key.
+        HasUnreadableKey = Credentials is null && enteredNonEmpty && !VolcengineAccess.IsKeyPair(choice);
+        if (Credentials is null && choice is not null && !VolcengineAccess.IsKeyPair(choice))
+        {
+            var json = await _runCli(choice, cancellationToken).ConfigureAwait(false);
+            var usage = VolcengineAccess.ParseCli(json, account.AccountId, context.Now);
+            return usage is null
+                ? ProviderReadResult.Failed(ProviderReadHealth.HelperNotRunning, choice)
+                : ProviderReadResult.Ok(usage);
+        }
 
         if (Credentials is null)
         {
@@ -112,7 +281,7 @@ public sealed class VolcengineProvider : HttpUsageProviderBase
     protected override string EndpointOrDefault => _pinnedUrl ?? Endpoint;
 
     // The pair check happened in ReadAsync; the base guard just needs a
-    // non-empty marker — never the actual secret, which travels in headers
+    // non-empty marker �?never the actual secret, which travels in headers
     // built by BuildRequest.
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
         Credentials is null ? null : "signed";
@@ -177,7 +346,7 @@ public static class VolcengineMapping
 {
     /// <summary>
     /// A window whose label cannot be read is left out rather than guessed at.
-    /// `reportsLength` is false for monthly on purpose: a month is 28–31 days,
+    /// `reportsLength` is false for monthly on purpose: a month is 28�?1 days,
     /// so 30 is a sort key and not a measurement.
     /// </summary>
     public static UsageWindow? Window(string id, string label, double usedPercent, string scope, DateTimeOffset? resetsAt)
@@ -216,7 +385,8 @@ public static class VolcengineMapping
             ReportsLength: reportsLength,
             // Ark reports no "you are blocked" flag of its own, so the only honest
             // signal is its own figure reaching its own ceiling.
-            IsExhausted: used >= 1);
+            // Volcengine reports Percent 100 as a full window (their figure).
+            IsExhausted: usedPercent >= 100);
     }
 
     /// <summary>`reset_at`/`updated_at` have shipped as ISO strings AND as numbers, the

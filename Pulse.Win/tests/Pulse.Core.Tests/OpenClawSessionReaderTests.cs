@@ -168,4 +168,30 @@ public class OpenClawSessionReaderTests : IDisposable
         Assert.Equal(7, record.Tally.Output); // stood in
         Assert.Equal(10, record.Tally.Input);
     }
+
+    [Fact]
+    public void Legacy_Product_Directories_Are_All_Scanned()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"pulse-openclaw-home-{Guid.NewGuid():N}");
+        try
+        {
+            foreach (var product in new[] { ".openclaw", ".clawdbot", ".moltbot", ".moldbot" })
+            {
+                var sessions = Path.Combine(home, product, "sessions");
+                Directory.CreateDirectory(sessions);
+                File.WriteAllLines(Path.Combine(sessions, "ev.jsonl"),
+                [
+                    AssistantEvent($"{product}-e1", 1789981200000, input: 10, output: 5),
+                ]);
+            }
+
+            var records = OpenClawSessionReader.Records(home);
+            Assert.Equal(4, records.Count);
+            Assert.Equal(40, records.Sum(r => r.Tally.Input));
+        }
+        finally
+        {
+            try { Directory.Delete(home, recursive: true); } catch (IOException) { }
+        }
+    }
 }

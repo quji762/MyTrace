@@ -56,7 +56,17 @@ public sealed class UsageCache
                 return null;
             }
 
-            return usage;
+            // A reset that passed after the reading was stored is not still valid.
+            var pruned = PruneWindows(usage, now);
+            if (pruned.Windows.Count == 0 && pruned.CreditRemaining is null)
+            {
+                _entries.Remove(Key(provider, accountId));
+                return null;
+            }
+
+            if (!ReferenceEquals(pruned, usage))
+                _entries[Key(provider, accountId)] = new CacheEntry(pruned);
+            return pruned;
         }
     }
 

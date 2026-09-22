@@ -66,7 +66,7 @@ public class UnslothReaderTests : IDisposable
             """);
 
         var records = UnslothReader.Read(_dbPath);
-        var record = Assert.Single(records.Where(r => r.SessionID == "t1"));
+        var record = Assert.Single(records, r => r.SessionID == "t1");
         Assert.Equal("glm-5", record.Model);
         Assert.Equal(700, record.Tally.Input);    // total 1600 - completion 500 - read 300 - write 100
         Assert.Equal(300, record.Tally.CacheRead); // bounded by prompt
@@ -84,7 +84,7 @@ public class UnslothReaderTests : IDisposable
         insert.CommandText = "INSERT INTO api_usage_events VALUES ('a1', '/v1/chat', 'z-model', 400, 100, 500, 1789981200000)";
         insert.ExecuteNonQuery();
 
-        var record = Assert.Single(UnslothReader.Read(_dbPath).Where(r => r.SessionID == "unsloth:api"));
+        var record = Assert.Single(UnslothReader.Read(_dbPath), r => r.SessionID == "unsloth:api");
         Assert.Equal(400, record.Tally.Input);
         Assert.Equal(100, record.Tally.Output);
         Assert.Equal(0, record.Tally.CacheRead);

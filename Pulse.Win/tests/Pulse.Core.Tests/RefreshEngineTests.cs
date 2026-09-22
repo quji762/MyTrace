@@ -1,6 +1,7 @@
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Refresh;
+using Pulse.Core.Usage;
 using Xunit;
 
 namespace Pulse.Core.Tests;
@@ -113,6 +114,54 @@ public class RefreshEngineTests
         Assert.Equal(0, secondReads);
         release.SetResult();
         await first;
+    }
+
+    [Fact]
+    public async Task Failure_After_Success_Keeps_The_Last_Good_Reading()
+    {
+        var provider = new OnceThenFailProvider();
+        var engine = new RefreshEngine(
+            _ => provider,
+            _ => new AdaptiveRefresh.Signals { PanelVisible = true },
+            new FakeLogger());
+        var results = new List<ProviderReadResult>();
+        engine.ReadingChanged += (_, result) => results.Add(result);
+
+        var account = Account(ProviderId.KimiCode, "kimiCode");
+        var accounts = new[] { account };
+        engine.Schedule(account);
+        await engine.RunDueAsync(accounts, CancellationToken.None);
+
+        engine.Schedule(account);
+        await engine.RunDueAsync(accounts, CancellationToken.None);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal(ProviderReadHealth.Healthy, results[0].Health);
+        Assert.Equal(UsageState.Live, results[0].Usage!.State);
+        Assert.Equal(ProviderReadHealth.ProviderUnavailable, results[1].Health);
+        var restored = results[1].Usage;
+        Assert.NotNull(restored);
+        Assert.Equal(UsageState.Stale, restored.State);
+        Assert.Equal(0.4, restored.Windows[0].UsedFraction);
+    }
+
+    private sealed class OnceThenFailProvider : IUsageProvider
+    {
+        private bool _failed;
+        public ProviderId Id => ProviderId.KimiCode;
+        public ProviderCapabilities Capabilities => ProviderCapabilities.For(Id);
+
+        public Task<ProviderReadResult> ReadAsync(MonitoredAccount account, ProviderReadContext context, CancellationToken ct)
+        {
+            if (_failed)
+                return Task.FromResult(ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "down"));
+            _failed = true;
+            var window = new UsageWindow(
+                "kimi", UsageWindowKind.Weekly, null, 0.4, 7 * 86400, context.Now.AddDays(3));
+            return Task.FromResult(ProviderReadResult.Ok(new ProviderUsage(
+                Id, account.AccountId, new[] { window }, context.Now, UsageState.Live,
+                null, null, null, UsageRoute.Endpoint)));
+        }
     }
 
     private sealed class BlockingProvider : IUsageProvider

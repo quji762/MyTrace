@@ -143,9 +143,12 @@ public static class HermesReader
             // empty string.
             var provider = key.Split('|')[2];
             var model = key.Split('|')[1];
-            records.Add(Record(startedAt, model,
+            if (Record(startedAt, model,
                 sums.Input, sums.Output, sums.Reasoning, sums.CacheRead, sums.CacheWrite,
-                session, $"hermes:{session}:{model}:{provider}"));
+                session, $"hermes:{session}:{model}:{provider}") is { } row)
+            {
+                records.Add(row);
+            }
         }
         return records;
     }
@@ -176,9 +179,12 @@ public static class HermesReader
                 ? DateTimeOffset.FromUnixTimeMilliseconds(startedAt)
                 : DateTimeOffset.FromUnixTimeSeconds(startedAt);
 
-            records.Add(Record(sessionStart, model,
+            if (Record(sessionStart, model,
                 session.Input, session.Output, session.Reasoning, session.CacheRead, session.CacheWrite,
-                id, id));
+                id, id) is { } row)
+            {
+                records.Add(row);
+            }
         }
         return records;
     }

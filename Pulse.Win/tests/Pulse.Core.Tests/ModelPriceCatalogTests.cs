@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.Tasks;
 using Pulse.Core.Ledger;
 using Xunit;
 
@@ -157,17 +158,17 @@ public class ModelPriceCatalogTests : IDisposable
     }
 
     [Fact]
-    public void LoadAsync_Uses_A_Fresh_Cache_Without_Downloading()
+    public async Task LoadAsync_Uses_A_Fresh_Cache_Without_Downloading()
     {
         var prices = Parse(Document);
         ModelPriceCatalog.WriteCache(_directory, prices);
 
-        var loaded = ModelPriceCatalog.LoadAsync(_directory, new FailingHandler().Client).Result;
+        var loaded = await ModelPriceCatalog.LoadAsync(_directory, new FailingHandler().Client);
         Assert.Equal(prices.Count, loaded.Count);
     }
 
     [Fact]
-    public void LoadAsync_Offline_Falls_Back_To_A_Stale_Cache_Of_The_Previous_Format()
+    public async Task LoadAsync_Offline_Falls_Back_To_A_Stale_Cache_Of_The_Previous_Format()
     {
         var prices = Parse(Document);
         Directory.CreateDirectory(_directory);
@@ -176,7 +177,7 @@ public class ModelPriceCatalogTests : IDisposable
             JsonSerializer.Serialize(new ModelPriceCatalog.CacheFile(
                 DateTimeOffset.UtcNow - TimeSpan.FromDays(3), prices)));
 
-        var loaded = ModelPriceCatalog.LoadAsync(_directory, new FailingHandler().Client).Result;
+        var loaded = await ModelPriceCatalog.LoadAsync(_directory, new FailingHandler().Client);
         Assert.Equal(prices.Count, loaded.Count);
     }
 

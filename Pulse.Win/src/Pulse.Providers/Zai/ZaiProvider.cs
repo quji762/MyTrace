@@ -4,6 +4,7 @@ using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
 using Pulse.Providers.Internal;
+using Pulse.Providers.Local;
 
 namespace Pulse.Providers.Zai;
 
@@ -35,8 +36,13 @@ public sealed class ZaiProvider : HttpUsageProviderBase
 
     private string Host => _id == ProviderId.GlmCoding ? "https://open.bigmodel.cn" : "https://api.z.ai";
 
-    protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+    protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
+    {
+        var pasted = _credentialResolver(account.AccountId);
+        if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        if (_id != ProviderId.GlmCoding || !AccountScope.IsPrimary(account)) return null;
+        return GlmKeyFile.ReadKey(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
 
     protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now)
     {
@@ -180,7 +186,7 @@ public sealed class ZaiProvider : HttpUsageProviderBase
             var remaining = GetDouble(limit, "remaining");
             var current = GetDouble(limit, "currentValue");
             double? used = null;
-            if (remaining is { } r) used = Math.Max(u - r, current ?? (u - r));
+            if (remaining is { } r) used = current ?? (u - r);
             else if (current is { } c) used = c;
             if (used is { } usedValue)
                 return Math.Clamp(Math.Min(usedValue, u) / u, 0, 1);

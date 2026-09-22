@@ -48,12 +48,17 @@ public sealed record OAuthTokens(
 }
 
 /// <summary>The user-facing step of a device flow: a code on screen.</summary>
-public sealed record DevicePrompt(string UserCode, string VerificationUrl, TimeSpan Interval, string? VerificationUrlComplete = null);
+public sealed record DevicePrompt(
+    string UserCode,
+    string VerificationUrl,
+    TimeSpan Interval,
+    string? VerificationUrlComplete = null,
+    string? DeviceCode = null);
 
 /// <summary>
 /// GitHub Copilot device flow; port of upstream GitHubDeviceLogin.
 /// Drives the VS Code Copilot plugin's public client, asking for `read:user` and
-/// NOTHING else â€” a security decision, not a missing scope field: the usage endpoint
+/// NOTHING else â€?a security decision, not a missing scope field: the usage endpoint
 /// accepts any GitHub token, and borrowing one that carries repo/workflow hands a
 /// percentage over the run of someone's source code.
 ///
@@ -71,7 +76,7 @@ public static class GitHubDeviceLogin
     public static async Task<DevicePrompt> StartAsync(CancellationToken cancellationToken = default)
     {
         using var client = HttpClientFactory.Shared();
-        var response = await client.PostAsync(CodeUrl,
+        using var response = await client.PostAsync(CodeUrl,
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["client_id"] = ClientID,
@@ -90,7 +95,20 @@ public static class GitHubDeviceLogin
 
         // Only GitHub's own verification_uri_complete would be used; it never sends one.
         var complete = root.TryGetProperty("verification_uri_complete", out var vuc) ? vuc.GetString() : null;
-        return new DevicePrompt(userCode, verification, TimeSpan.FromSeconds(interval), complete);
+        return new DevicePrompt(userCode!, verification!, TimeSpan.FromSeconds(interval), complete, deviceCode);
+    }
+
+    /// <summary>The token-endpoint form. The device_code is the handle from the code response, never the user-facing code or the verification URL.</summary>
+    public static Dictionary<string, string> TokenFields(DevicePrompt prompt)
+    {
+        if (string.IsNullOrEmpty(prompt.DeviceCode))
+            throw new InvalidOperationException("GitHub device_code was not retained");
+        return new Dictionary<string, string>
+        {
+            ["client_id"] = ClientID,
+            ["device_code"] = prompt.DeviceCode!,
+            ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+        };
     }
 
     /// <summary>Polls until the user finishes or the deadline passes. Returns null on timeout.</summary>
@@ -102,13 +120,8 @@ public static class GitHubDeviceLogin
         while (DateTimeOffset.Now < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var response = await client.PostAsync(TokenUrl,
-                new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["client_id"] = ClientID,
-                    ["device_code"] = prompt.UserCode.Length > 0 ? DeviceCodeOf(prompt) : "",
-                    ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
-                }), cancellationToken).ConfigureAwait(false);
+            using var response = await client.PostAsync(TokenUrl,
+                new FormUrlEncodedContent(TokenFields(prompt)), cancellationToken).ConfigureAwait(false);
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
             var root = document.RootElement;
@@ -116,13 +129,14 @@ public static class GitHubDeviceLogin
                 token.GetString() is { } access && access.Length > 0)
                 return access;
 
-            // The specification's own words, which GitHub does use here â€” unlike
+            // The specification's own words, which GitHub does use here â€?unlike
             // the OpenAI flow, where 403/404 stand in for "still waiting".
             var error = root.TryGetProperty("error", out var err) ? err.GetString() : null;
             switch (error)
             {
                 case "slow_down":
-                    await Task.Delay(prompt.Interval + TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                    prompt = prompt with { Interval = prompt.Interval + TimeSpan.FromSeconds(5) };
+                    await Task.Delay(prompt.Interval, cancellationToken).ConfigureAwait(false);
                     continue;
                 case "authorization_pending" or null:
                     await Task.Delay(prompt.Interval, cancellationToken).ConfigureAwait(false);
@@ -133,22 +147,26 @@ public static class GitHubDeviceLogin
         }
         return null;
     }
-
-    private static string DeviceCodeOf(DevicePrompt prompt) => prompt.VerificationUrlComplete ?? _deviceCodeBackingField;
-
-    [ThreadStatic] private static string? _deviceCodeBackingField;
 }
 
-/// <summary>Shared HTTP client for auth flows.</summary>
+/// <summary>Shared HTTP client for auth flows (follows NetworkProxy).</summary>
 public static class HttpClientFactory
 {
-    public static HttpClient Shared() => new() { Timeout = TimeSpan.FromSeconds(20) };
+    public static HttpClient Shared()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        };
+        Pulse.Core.Platform.NetworkProxy.Load().ApplyTo(handler);
+        return new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(20) };
+    }
 }
 
 /// <summary>
 /// Claude Code loopback OAuth; port of upstream OAuthLogin.Configuration(.claudeCode)
 /// and LoopbackCallback. Redirect flow on ANY free loopback port, path /callback.
-/// Scopes: `user:profile` ONLY â€” the CLI also asks inference/session scopes, which
+/// Scopes: `user:profile` ONLY â€?the CLI also asks inference/session scopes, which
 /// would let this app spend the plan it is only supposed to report on. Token endpoint
 /// takes JSON and the exchange carries `state`.
 /// </summary>
@@ -160,17 +178,25 @@ public sealed class ClaudeLoopbackLogin
     public const string RedirectPath = "/callback";
     public static readonly string[] Scopes = ["user:profile"];
 
-    private readonly int _port;
+    private int _port;
+    private string? _redirectUri;
+    private TcpListener _listener;
 
     public ClaudeLoopbackLogin(int? port = null)
     {
-        _port = port ?? GetFreePort();
+        // One listener for the whole flow: RedirectUri and the callback share
+        // the same port (free-then-rebind is a TOCTOU race).
+        _listener = new TcpListener(IPAddress.Loopback, port ?? 0);
+        _listener.Start();
+        _port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+        _redirectUri = $"http://127.0.0.1:{_port}{RedirectPath}";
     }
 
-    public string RedirectUri => $"http://127.0.0.1:{_port}{RedirectPath}";
+    /// <summary>Stable for the life of the flow â€?never a new port after Stop.</summary>
+    public string RedirectUri => _redirectUri!;
 
-    /// <summary>The URL to open in the default browser.</summary>
-    public string BuildAuthorizeUrl(string state)
+    /// <summary>The URL to open in the default browser. PKCE challenge is S256 of the encoded verifier.</summary>
+    public string BuildAuthorizeUrl(string state, string? codeChallenge = null)
     {
         var query = new Dictionary<string, string?>
         {
@@ -181,6 +207,11 @@ public sealed class ClaudeLoopbackLogin
             ["state"] = state,
             ["code"] = "true", // extra authorize item the CLI sends
         };
+        if (!string.IsNullOrEmpty(codeChallenge))
+        {
+            query["code_challenge"] = codeChallenge;
+            query["code_challenge_method"] = "S256";
+        }
         return AuthorizeUrl + "?" + string.Join("&", query.Select(kv =>
             $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value ?? "")}"));
     }
@@ -188,26 +219,43 @@ public sealed class ClaudeLoopbackLogin
     /// <summary>Waits (up to timeout) for the browser's redirect carrying the code.</summary>
     public async Task<(string Code, string State)?> WaitForCallbackAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        var listener = new TcpListener(IPAddress.Loopback, _port);
         try
         {
-            listener.Start();
+            if (!_listener.Server.IsBound) _listener.Start();
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(timeout);
 
-            using var client = await listener.AcceptTcpClientAsync(cts.Token).ConfigureAwait(false);
-            using var stream = client.GetStream();
-            var buffer = new byte[8192];
-            var read = await stream.ReadAsync(buffer, cts.Token).ConfigureAwait(false);
-            var request = Encoding.UTF8.GetString(buffer, 0, read);
+            // Browsers may preconnect or fetch /favicon first; keep accepting
+            // until a request carries code&state or the timeout fires.
+            string? target = null;
+            while (target is null && !cts.IsCancellationRequested)
+            {
+                using var client = await _listener.AcceptTcpClientAsync(cts.Token).ConfigureAwait(false);
+                using var stream = client.GetStream();
+                var buffer = new byte[8192];
+                var read = await stream.ReadAsync(buffer, cts.Token).ConfigureAwait(false);
+                var request = new StringBuilder();
+                request.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                while (read > 0 && !request.ToString().Contains('\n'))
+                {
+                    read = await stream.ReadAsync(buffer, cts.Token).ConfigureAwait(false);
+                    if (read > 0)
+                        request.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                }
 
-            // Minimal HTTP response so the browser tab closes cleanly.
-            var response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body>You can close this window.</body></html>";
-            var responseBytes = Encoding.UTF8.GetBytes(response);
-            await stream.WriteAsync(responseBytes, cts.Token).ConfigureAwait(false);
+                var response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body>You can close this window.</body></html>";
+                var responseBytes = Encoding.UTF8.GetBytes(response);
+                await stream.WriteAsync(responseBytes, cts.Token).ConfigureAwait(false);
 
-            var line = request.Split("\r\n").FirstOrDefault() ?? "";
-            var target = line.Split(' ').ElementAtOrDefault(1) ?? "";
+                var line = request.ToString().Split("\r\n").FirstOrDefault() ?? "";
+                var candidate = line.Split(' ').ElementAtOrDefault(1) ?? "";
+                if (candidate.Contains("code=", StringComparison.Ordinal) ||
+                    candidate.Contains("error=", StringComparison.Ordinal))
+                {
+                    target = candidate;
+                }
+            }
+            if (target is null) return null;
             var query = target.Contains('?') ? target[(target.IndexOf('?') + 1)..] : "";
             var parameters = query.Split('&')
                 .Select(pair => pair.Split('=', 2))
@@ -224,7 +272,7 @@ public sealed class ClaudeLoopbackLogin
         }
         finally
         {
-            listener.Stop();
+            _listener.Stop();
         }
     }
 
@@ -242,7 +290,7 @@ public sealed class ClaudeLoopbackLogin
             ["code_verifier"] = codeVerifier,
         });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        var response = await client.PostAsync(TokenUrl, content, cancellationToken).ConfigureAwait(false);
+        using var response = await client.PostAsync(TokenUrl, content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) return null;
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
@@ -258,15 +306,17 @@ public sealed class ClaudeLoopbackLogin
 
     private static int GetFreePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
+        // Bind an ephemeral listener and take its port â€?free-then-rebind is a
+        // TOCTOU race against other processes.
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
         try
         {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
+            return ((IPEndPoint)probe.LocalEndpoint).Port;
         }
         finally
         {
-            listener.Stop();
+            probe.Stop();
         }
     }
 }
@@ -275,7 +325,7 @@ public sealed class ClaudeLoopbackLogin
 /// OpenAI device-code flow for Codex; port of upstream OAuthLogin.DeviceFlow.openAI.
 /// NOT RFC 8628: poll returns 403/404 for "still waiting", the token grant needs the
 /// provider-generated proof key, and the exchange does NOT carry `state`. Scopes must
-/// be the FULL published set â€” a narrower set ends on OpenAI's error page.
+/// be the FULL published set â€?a narrower set ends on OpenAI's error page.
 /// </summary>
 public sealed class OpenAIDeviceLogin
 {
@@ -295,7 +345,7 @@ public sealed class OpenAIDeviceLogin
         using var content = new StringContent(
             JsonSerializer.Serialize(new Dictionary<string, string> { ["client_id"] = ClientID }),
             Encoding.UTF8, "application/json");
-        var response = await client.PostAsync(BaseUrl + "/deviceauth/usercode", content, cancellationToken).ConfigureAwait(false);
+        using var response = await client.PostAsync(BaseUrl + "/deviceauth/usercode", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
@@ -317,7 +367,8 @@ public sealed class OpenAIDeviceLogin
     {
         var deadline = DateTimeOffset.Now + TimeSpan.FromMinutes(15);
         using var client = HttpClientFactory.Shared();
-        var deviceAuthID = DeviceAuthId!;
+        var deviceAuthID = DeviceAuthId
+            ?? throw new InvalidOperationException("StartAsync must run before WaitForTokensAsync");
         var userCode = prompt.UserCode;
 
         while (DateTimeOffset.Now < deadline)
@@ -335,7 +386,7 @@ public sealed class OpenAIDeviceLogin
                     ["code_verifier"] = grantedVerifier,
                 });
                 using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-                var response = await client.PostAsync(TokenUrl, content, cancellationToken).ConfigureAwait(false);
+                using var response = await client.PostAsync(TokenUrl, content, cancellationToken).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode) return null;
 
                 using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));

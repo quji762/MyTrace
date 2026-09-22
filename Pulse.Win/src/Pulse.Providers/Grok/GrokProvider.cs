@@ -47,8 +47,9 @@ public sealed class GrokProvider : HttpUsageProviderBase
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var pasted = _credentialResolver(account.Label);
+        var pasted = _credentialResolver(account.AccountId);
         if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        if (!AccountScope.IsPrimary(account)) return null;
 
         // Borrow the Windows CLI's login if it is there (mirrors ~/.grok/auth.json).
         var authFile = Path.Combine(

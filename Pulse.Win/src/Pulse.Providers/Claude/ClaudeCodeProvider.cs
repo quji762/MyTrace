@@ -44,28 +44,32 @@ public sealed class ClaudeCodeProvider : HttpUsageProviderBase
     /// <summary>Pasted token wins; otherwise borrow the CLI's stored login.</summary>
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var pasted = _credentialResolver(account.Label);
+        var pasted = _credentialResolver(account.AccountId);
         if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        // An added account has its own token. Borrowing the CLI here would
+        // paint that slot with the primary login's numbers.
+        if (!AccountScope.IsPrimary(account)) return null;
         return _cliTokenLocator?.Invoke() ?? LocateCliToken();
     }
 
     public override async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
-        var result = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
+        var endpoint = await base.ReadAsync(account, context, cancellationToken).ConfigureAwait(false);
 
-        // A network stumble shouldn't hide a perfectly good captured reading,
-        // but a live reading outranks a captured one: the capture keeps its turn
-        // only when there is no live reading to be had. This is a push route —
-        // it only moves while a session runs — so the reading's age is part of
-        // what it means.
-        var needsFallback = result.Health is ProviderReadHealth.CredentialExpired
-            or ProviderReadHealth.Unauthorized
-            or ProviderReadHealth.ProviderUnavailable;
-        if (!needsFallback) return result;
+        // A pin keeps a successful reading from the other route out of the result.
+        return RoutePinning.Select(account.Pin, endpoint, () => StatusLineResult(account, context));
+    }
+
+    private static ProviderReadResult StatusLineResult(MonitoredAccount account, ProviderReadContext context)
+    {
+        // The status-line capture is the machine's Claude Code session, which
+        // is the primary account. An added account does not inherit it.
+        if (!AccountScope.IsPrimary(account))
+            return ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "status line unavailable");
 
         if (Pulse.Core.ClaudeHook.StatusLineCapture.Read() is not { } captured)
-            return result;
+            return ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "status line unavailable");
 
         var windows = new List<UsageWindow>();
         if (captured.FiveHourPercent is { } five)
@@ -85,7 +89,8 @@ public sealed class ClaudeCodeProvider : HttpUsageProviderBase
                 WindowSeconds: 7 * 86400,
                 ResetsAt: captured.SevenDayReset));
 
-        if (windows.Count == 0) return result;
+        if (windows.Count == 0)
+            return ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, "status line unavailable");
 
         // Between sessions the figures are whatever they were at last use:
         // older than ten minutes reads as stale, not live (upstream freshFor).

@@ -26,6 +26,60 @@ namespace Pulse.Core.Ledger;
 /// </summary>
 public static class PrimeAgentSessionReader
 {
+    /// <summary>Session roots: `sessions` plus the sibling `session-artifacts`.
+    /// `PRIME_AGENT_HOME` relocates the product tree, `PRIME_AGENT_SESSION_DIR`
+    /// or a `settings.json` `sessionDir` redirects the sessions half only —
+    /// artifacts stay under the product tree.</summary>
+    public static IReadOnlyList<string> Roots(
+        string? userProfile = null,
+        IReadOnlyDictionary<string, string?>? environment = null)
+    {
+        string? FromEnv(string name)
+        {
+            var value = environment is null
+                ? Environment.GetEnvironmentVariable(name)
+                : environment.GetValueOrDefault(name);
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        var home = userProfile ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var product = FromEnv("PRIME_AGENT_HOME") is { } productHome
+            ? productHome
+            : string.IsNullOrEmpty(home) ? null : Path.Combine(home, ".prime");
+        if (product is null) return Array.Empty<string>();
+
+        var sessions = FromEnv("PRIME_AGENT_SESSION_DIR")
+            ?? SettingsSessionDir(product)
+            ?? Path.Combine(product, "agent", "sessions");
+        return
+        [
+            sessions,
+            Path.Combine(product, "agent", "session-artifacts"),
+        ];
+    }
+
+    /// <summary>The `sessionDir` key in the product's `settings.json`, if any.
+    /// A blank, non-string or unreadable file is treated as absent rather than
+    /// inventing a path.</summary>
+    private static string? SettingsSessionDir(string product)
+    {
+        var path = Path.Combine(product, "settings.json");
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            if (!document.RootElement.TryGetProperty("sessionDir", out var value)) return null;
+            if (value.ValueKind != System.Text.Json.JsonValueKind.String) return null;
+            var dir = value.GetString();
+            return string.IsNullOrWhiteSpace(dir) ? null : dir;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     public static IReadOnlyList<AgentUsageRecord> Records(IEnumerable<string> roots)
     {
         var files = new List<PiTranscript.ParsedFile>();

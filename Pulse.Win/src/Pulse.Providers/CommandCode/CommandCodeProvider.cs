@@ -13,7 +13,7 @@ namespace Pulse.Providers.CommandCode;
 ///
 /// Four undocumented account routes on api.commandcode.ai, each Bearer auth, in
 /// the order the CLI's own /usage overlay reads them: whoami (org id + spend
-/// limits) → billing/credits → billing/subscriptions → usage/summary.
+/// limits) �?billing/credits �?billing/subscriptions �?usage/summary.
 ///
 /// What is deliberately NOT done: the CLI's hard-coded table of monthly credit
 /// allowances per plan id. A number that lives in a client is not something the
@@ -38,10 +38,11 @@ public sealed class CommandCodeProvider : HttpUsageProviderBase
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var pasted = _credentialResolver(account.Label);
+        var pasted = _credentialResolver(account.AccountId);
         if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        if (!AccountScope.IsPrimary(account)) return null;
 
-        // What `cmd auth login` wrote (~/.commandcode/auth.json → apiKey). Only
+        // What `cmd auth login` wrote (~/.commandcode/auth.json �?apiKey). Only
         // the production file; the CLI's staging/local variants are not
         // credentials for the service reported on.
         var authFile = Path.Combine(
@@ -84,8 +85,8 @@ public sealed class CommandCodeProvider : HttpUsageProviderBase
         var credits = await GetAsync(Host + "/alpha/billing/credits" + orgSuffix, key!, cancellationToken).ConfigureAwait(false);
         if (credits.Body is null) return Failed(credits);
 
-        // A subscription this account has not got is not a failure — a
-        // pay-as-you-go balance is a complete answer — so this may come back empty.
+        // A subscription this account has not got is not a failure �?a
+        // pay-as-you-go balance is a complete answer �?so this may come back empty.
         var subscription = await GetAsync(Host + "/alpha/billing/subscriptions" + orgSuffix, key!, cancellationToken).ConfigureAwait(false);
 
         var periodStart = subscription.Body is { } sub && sub.TryGetProperty("data", out var subData) &&
@@ -94,8 +95,15 @@ public sealed class CommandCodeProvider : HttpUsageProviderBase
             ? cps
             : (JsonElement?)null;
         var since = CommandCodeMapping.StampQuery(periodStart);
+        var query = orgSuffix.Length == 0 ? "?" : orgSuffix + "&";
+        if (since is not null)
+            query += $"since={Uri.EscapeDataString(since)}";
+        else if (query.EndsWith('&'))
+            query = query[..^1];
+        else if (query == "?")
+            query = "";
         var summary = await GetAsync(
-            Host + "/alpha/usage/summary" + orgSuffix + (since is null ? "" : $"&since={Uri.EscapeDataString(since)}"),
+            Host + "/alpha/usage/summary" + query,
             key!, cancellationToken).ConfigureAwait(false);
 
         var windows = CommandCodeMapping.Windows(whoami.Body, credits.Body, subscription.Body, summary.Body);
@@ -174,7 +182,7 @@ public static class CommandCodeMapping
 {
     /// <summary>
     /// Shortest window first; ties keep the order they were built in (a stable
-    /// sort — the provider produces equal lengths as a matter of course).
+    /// sort �?the provider produces equal lengths as a matter of course).
     /// </summary>
     public static List<UsageWindow> Windows(JsonElement? whoami, JsonElement? credits, JsonElement? subscription, JsonElement? summary)
     {
@@ -225,7 +233,7 @@ public static class CommandCodeMapping
         return windows;
     }
 
-    /// <summary>The organisation's spend limits — money, already counted as SPENT. No inversion.</summary>
+    /// <summary>The organisation's spend limits �?money, already counted as SPENT. No inversion.</summary>
     private static List<UsageWindow> OrgWindows(JsonElement whoami)
     {
         var windows = new List<UsageWindow>();
@@ -275,7 +283,7 @@ public static class CommandCodeMapping
     {
         "daily" => (86400, true),
         "weekly" => (7 * 86400, true),
-        // A month is 28–31 days, stored as a flat 30 for ordering only.
+        // A month is 28�?1 days, stored as a flat 30 for ordering only.
         "monthly" => (30 * 86400, false),
         // `total` is a lifetime cap: seconds are a sort key that puts it last.
         _ => (365 * 86400, false),
@@ -285,7 +293,7 @@ public static class CommandCodeMapping
     /// The monthly row: the plan's grant while one is running, the purchased
     /// balance when none. The grant is NOT reported by anything (upstream refuses
     /// the CLI's client-side table), so on a plan the remainder has no reported
-    /// denominator and draws nothing — a plan this build cannot size draws
+    /// denominator and draws nothing �?a plan this build cannot size draws
     /// nothing rather than a guess.
     /// </summary>
     private static UsageWindow? CreditWindow(JsonElement credits, JsonElement? subscription, JsonElement? summary)
@@ -295,7 +303,7 @@ public static class CommandCodeMapping
 
         if (IsOnAPlan(credits, subscription))
         {
-            // Remainder reported; denominator inferred → would need Estimate
+            // Remainder reported; denominator inferred �?would need Estimate
             // (planPrice), but the grant table was refused upstream, so no row.
             return null;
         }
@@ -310,7 +318,7 @@ public static class CommandCodeMapping
         var spent = Math.Max(0, reportedSpend.Value);
         var pool = remaining + spent;
         // Nothing left and nothing spent is an account that said nothing about a
-        // pool at all — not the same as one that is empty.
+        // pool at all �?not the same as one that is empty.
         if (pool <= 0) return null;
 
         var (end, seconds) = BillingPeriod(subscription);
@@ -365,7 +373,7 @@ public static class CommandCodeMapping
         return string.IsNullOrEmpty(id) ? null : id;
     }
 
-    /// <summary>`individual-pro` → "Individual Pro". Passed through tidied, not mapped.</summary>
+    /// <summary>`individual-pro` �?"Individual Pro". Passed through tidied, not mapped.</summary>
     public static string? PlanName(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;

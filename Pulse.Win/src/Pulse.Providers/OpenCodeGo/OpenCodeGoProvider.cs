@@ -3,6 +3,7 @@ using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
 using Pulse.Providers.Internal;
+using Pulse.Providers.Local;
 
 namespace Pulse.Providers.OpenCodeGo;
 
@@ -29,8 +30,14 @@ public sealed class OpenCodeGoProvider : HttpUsageProviderBase
 
     protected override string Endpoint => EndpointUrl;
 
-    protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+    protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
+    {
+        var pasted = _credentialResolver(account.AccountId);
+        if (!string.IsNullOrWhiteSpace(pasted)) return pasted.Trim();
+        if (!AccountScope.IsPrimary(account)) return null;
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return OpenCodeAuthFile.ReadKey(Path.Combine(home, ".local", "share", "opencode", "auth.json"));
+    }
 
     protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now)
     {

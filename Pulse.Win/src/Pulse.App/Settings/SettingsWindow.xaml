@@ -1,111 +1,214 @@
 <Window x:Class="Pulse.App.Settings.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pulse Settings"
-        Width="520" Height="620"
+        xmlns:app="clr-namespace:Pulse.App"
+        Title="Pulse"
+        Width="760" Height="680"
+        MinWidth="640" MinHeight="480"
         WindowStartupLocation="CenterScreen"
-        Background="#FF1E1E1E">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        Background="{DynamicResource SettingsBackground}"
+        Foreground="{DynamicResource RailForeground}"
+        FontFamily="Segoe UI, Segoe UI Variable, Microsoft YaHei UI, sans-serif">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Pulse.App;component/Themes/PulseStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="Button" BasedOn="{StaticResource PulseButton}" />
+            <Style TargetType="TextBox" BasedOn="{StaticResource PulseTextBox}" />
+            <Style TargetType="CheckBox" BasedOn="{StaticResource PulseCheckBox}" />
+            <Style TargetType="ComboBox" BasedOn="{StaticResource PulseComboBox}" />
+            <Style TargetType="ListBoxItem" BasedOn="{StaticResource SidebarRow}" />
+        </ResourceDictionary>
+    </Window.Resources>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock Text="Provider credentials" FontSize="16" FontWeight="SemiBold"
-                       Foreground="#FFF2F2F2" />
-            <TextBlock Text="Keys are encrypted with DPAPI (current user) and never leave this machine."
-                       FontSize="11" Foreground="#FF9E9E9E" Margin="0,4,0,10" />
-        </StackPanel>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <ItemsControl x:Name="ProviderList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Background="#FF2A2A2A" CornerRadius="6" Padding="10" Margin="0,0,0,6">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center"
-                                               Foreground="#FFF2F2F2" />
-                                    <TextBox Grid.Column="1" Text="{Binding Secret, UpdateSourceTrigger=PropertyChanged}"
-                                             Margin="8,0" VerticalContentAlignment="Center"
-                                             Background="#FF181818" Foreground="#FFF2F2F2" BorderBrush="#FF3D3D3D" />
-                                    <Button Grid.Column="2" Content="Save" Padding="10,4"
-                                            Click="OnSaveCredential" Tag="{Binding}" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBackground}">
+            <StackPanel Margin="22,28,18,24">
+                <TextBlock Text="Pulse" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock x:Name="BrandCaption" Text="Usage on this PC" FontSize="12" Opacity="0.5" Margin="0,4,0,28" />
+                <TextBlock x:Name="RailNavLabel" Text="Rail" FontSize="13" FontWeight="SemiBold" />
+                <TextBlock x:Name="RailNavHint" Text="A ring for each provider that is on. The colour is how close the limit is."
+                           FontSize="12" Opacity="0.55" TextWrapping="Wrap" Margin="0,6,0,18" />
+                <TextBlock x:Name="RailNavHint2" Text="Right-click the rail for this window, token spend, or to quit."
+                           FontSize="12" Opacity="0.55" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
 
-                <!-- Multiple accounts: claudeCode, codex, grok, grokBot only
-                     (upstream supportsMultipleAccounts; a wider UI would promise
-                     a behavior the credential model cannot deliver) -->
-                <Border Background="#FF2A2A2A" CornerRadius="6" Padding="10" Margin="0,8,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Additional accounts" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="#FFF2F2F2" />
-                        <TextBlock Text="Sign in to extra accounts with their own OAuth login. Never touches the CLI's own stored credential."
-                                   FontSize="10" Foreground="#FF9E9E9E" Margin="0,2,0,8" TextWrapping="Wrap" />
+        <Grid Grid.Column="1" Margin="22,20,22,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock x:Name="ProvidersTitle" Text="Providers" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ProvidersHint" Text="Turn one off and it leaves the rail. A key is only needed when Pulse cannot find a local login."
+                               FontSize="12" Opacity="0.55" TextWrapping="Wrap" Margin="0,4,0,12" />
+
+                    <ItemsControl x:Name="ProviderList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Padding="12,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <app:GlyphView Grid.Column="0" Provider="{Binding Provider}"
+                                                       Width="18" Height="18" Margin="0,0,10,0"
+                                                       VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1">
+                                            <CheckBox Content="{Binding DisplayName}"
+                                                      IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                      FontSize="13"
+                                                      Checked="OnProviderToggled" Unchecked="OnProviderToggled" />
+                                            <TextBox Text="{Binding Secret, UpdateSourceTrigger=PropertyChanged}"
+                                                     Margin="0,8,0,0" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="Save" Margin="10,0,0,0"
+                                                VerticalAlignment="Bottom" Click="OnSaveCredential" Tag="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Style="{StaticResource SectionTitle}" x:Name="MoreAccountsTitle" Text="More accounts" />
+                    <TextBlock x:Name="MoreAccountsHint" Text="Claude, Codex, Grok, Grok Bot, and Antigravity can each keep another login beside the one already in use. Antigravity adds a second language-server connection (port + CSRF), not an OAuth sign-in."
+                               FontSize="12" Opacity="0.55" TextWrapping="Wrap" Margin="0,4,0,12" />
+                    <Border Style="{StaticResource Card}" Padding="12,10">
                         <ItemsControl x:Name="ExtraAccountList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,2">
+                                    <StackPanel>
+                                    <Grid Margin="0,6">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="140" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
-                                                   VerticalAlignment="Center" Foreground="#FFF2F2F2" />
-                                        <TextBlock Grid.Column="1" Text="{Binding AccountsSummary}"
-                                                   VerticalAlignment="Center" FontSize="11"
-                                                   Foreground="#FF9E9E9E" Margin="8,0" />
-                                        <Button Grid.Column="2" Content="Add account" Padding="10,4"
-                                                Click="OnAddAccount" Tag="{Binding}" />
+                                        <app:GlyphView Provider="{Binding Provider}" Width="16" Height="16"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <TextBlock Grid.Column="2" Text="{Binding AccountsSummary}"
+                                                   VerticalAlignment="Center" FontSize="12" Opacity="0.55" />
+                                        <Button Grid.Column="3" x:Name="AddAccountButton" Content="Add account" Click="OnAddAccount" Tag="{Binding}" />
                                     </Grid>
+                                    <ItemsControl ItemsSource="{Binding Added}" Margin="24,2,0,4">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                               FontSize="12" />
+                                                    <Button Grid.Column="1" Content="{Binding RenameText}" FontSize="11" Margin="4,0"
+                                                            Click="OnRenameAccount" Tag="{Binding}" />
+                                                    <Button Grid.Column="2" Content="{Binding SignInAgainText}" FontSize="11" Margin="4,0"
+                                                            Click="OnSignInAgain" Tag="{Binding}" />
+                                                    <Button Grid.Column="3" Content="{Binding RemoveText}" FontSize="11" Margin="4,0"
+                                                            Click="OnRemoveAccount" Tag="{Binding}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
-                </Border>
+                    </Border>
 
-                <Border Background="#FF2A2A2A" CornerRadius="6" Padding="10" Margin="0,8,0,0">
-                    <CheckBox x:Name="StartupToggle" Content="Launch Pulse at startup"
-                              Foreground="#FFF2F2F2" Checked="OnStartupToggled" Unchecked="OnStartupToggled" />
-                </Border>
+                    <TextBlock Style="{StaticResource SectionTitle}" x:Name="GeneralTitle" Text="General" />
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="StartupToggle" Content="Launch Pulse at startup"
+                                      Checked="OnStartupToggled" Unchecked="OnStartupToggled" />
+                            <TextBlock x:Name="AlertsLabelBlock" Text="Alerts" FontSize="12" Opacity="0.55" Margin="0,14,0,4" />
+                            <ComboBox x:Name="AlertChoice" SelectionChanged="OnAlertChanged">
+                                <ComboBoxItem x:Name="AlertOffItem" Content="Off" />
+                                <ComboBoxItem x:Name="Alert80Item" Content="At 80% used" />
+                                <ComboBoxItem x:Name="Alert95Item" Content="At 95% used" />
+                            </ComboBox>
+                            <CheckBox x:Name="SpendToggle" Content="Read token spend from local logs"
+                                      Margin="0,14,0,0" Checked="OnSpendToggled" Unchecked="OnSpendToggled" />
+                            <CheckBox x:Name="HotkeyToggle" Content="Global hotkey Ctrl+Alt+P toggles the rail"
+                                      Margin="0,14,0,0" Checked="OnHotkeyToggled" Unchecked="OnHotkeyToggled" />
+                            <Button x:Name="SignInCopilotButton" Content="Sign in to GitHub Copilot" Margin="0,14,0,0"
+                                    HorizontalAlignment="Left" Click="OnCopilotSignIn" />
 
-                <Border Background="#FF2A2A2A" CornerRadius="6" Padding="10" Margin="0,8,0,0">
-                    <StackPanel>
+                            <TextBlock x:Name="LanguageLabelBlock" Style="{StaticResource GroupLabel}" Text="界面语言" />
+                            <ComboBox x:Name="LanguageChoice" SelectionChanged="OnLanguageChanged">
+                                <ComboBoxItem Content="中文" />
+                                <ComboBoxItem Content="English" />
+                            </ComboBox>
+                            <TextBlock x:Name="ThemeLabelBlock" Style="{StaticResource GroupLabel}" Text="外观" />
+                            <ComboBox x:Name="ThemeChoice" SelectionChanged="OnThemeChanged">
+                                <ComboBoxItem Content="浅色 Light" />
+                                <ComboBoxItem Content="深色 Dark" />
+                                <ComboBoxItem Content="跟随系统 System" />
+                            </ComboBox>
+                            <TextBlock x:Name="NetworkLabelBlock" Style="{StaticResource GroupLabel}" Text="网络" />
+                            <ComboBox x:Name="ProxyModeChoice" SelectionChanged="OnProxyModeChanged">
+                                <ComboBoxItem x:Name="ProxySystemItem" Content="Follow system" />
+                                <ComboBoxItem x:Name="ProxyManualItem" Content="Manual proxy" />
+                            </ComboBox>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="ProxyHostBox" Margin="0,0,6,0" />
+                                <TextBox x:Name="ProxyPortBox" Grid.Column="1" />
+                                <Button Grid.Column="2" x:Name="SaveProxyButton" Content="Save proxy" Margin="6,0,0,0" Click="OnSaveProxy" />
+                            </Grid>
+                            <TextBlock x:Name="ProxyHint" Text="Host and port save together. Empty host or port outside 1–65535 keeps the previous endpoint."
+                                       FontSize="11" Opacity="0.5" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+                            <TextBlock x:Name="VersionLabelBlock" Text="Version" FontSize="12" Opacity="0.55" Margin="0,16,0,4" />
+                            <TextBlock x:Name="VersionText" FontSize="13" />
+                            <Button x:Name="CheckUpdatesButton" Content="Check for updates" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                    Click="OnCheckUpdates" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,8,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Claude Code status line" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="#FFF2F2F2" />
-                                <TextBlock x:Name="StatusLineSummary" Text="" FontSize="10"
-                                           Foreground="#FF9E9E9E" Margin="0,2,0,0" TextWrapping="Wrap" />
+                            <StackPanel>
+                                <TextBlock x:Name="StatusLineTitle" Text="Claude Code status line" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock x:Name="StatusLineSummary" FontSize="12" Opacity="0.55"
+                                           TextWrapping="Wrap" Margin="0,4,12,0" />
                             </StackPanel>
-                            <Button x:Name="StatusLineButton" Grid.Column="1" Content="Enable" Padding="10,4"
+                            <Button x:Name="StatusLineButton" Grid.Column="1" Content="Enable"
                                     VerticalAlignment="Center" Click="OnStatusLineToggle" />
                         </Grid>
-                        <TextBlock Text="Shows Pulse's per-account context usage inside Claude Code. Your existing status line is remembered and restored on disable."
-                                   FontSize="10" Foreground="#FF9E9E9E" Margin="0,6,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                    </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="Close" Padding="14,5" Click="OnClose" />
-        </StackPanel>
+                    <TextBlock x:Name="VaultNote" Text="Saved keys stay on this PC, encrypted for your Windows user."
+                               FontSize="11" Opacity="0.4" Margin="0,14,0,8" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <Button x:Name="CloseButton" Grid.Row="1" Content="Close" HorizontalAlignment="Right" Margin="0,12,0,0"
+                    Click="OnClose" />
+        </Grid>
     </Grid>
 </Window>

@@ -4,14 +4,15 @@ using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
 using Pulse.Core.Usage;
 using Pulse.Providers.Internal;
+using Pulse.Providers.Local;
 
-namespace Pulse.Providers.Devine;
+namespace Pulse.Providers.Devin;
 
 /// <summary>
 /// Devin's quota endpoint route; port of upstream DevinUsageService (endpoint half).
 /// GET app.devin.ai/api/&lt;org&gt;/billing/quota/usage with a Bearer token the user pastes.
-/// The app-cache route (its editor's state.vscdb) is platform-local to the macOS app
-/// store layout and lands later with the Windows locator.
+/// The app-cache route reads the editor's state.vscdb. Those rows report what is
+/// left; <see cref="DevinMapping.CachedWindows"/> inverts that once into used fractions.
 ///
 /// The live reply reports what has been USED where the cached row reports what is
 /// left (measured upstream): `daily_percentage: 2` = 2% used, no inversion here.
@@ -22,10 +23,12 @@ public sealed class DevinProvider : HttpUsageProviderBase
     public const string Host = "https://app.devin.ai";
 
     private readonly Func<string?, string?> _credentialResolver;
+    private readonly Func<string?> _planDatabase;
 
-    public DevinProvider(Func<string?, string?>? credentialResolver = null)
+    public DevinProvider(Func<string?, string?>? credentialResolver = null, Func<string?>? planDatabase = null)
     {
         _credentialResolver = credentialResolver ?? (key => key);
+        _planDatabase = planDatabase ?? DefaultPlanDatabase;
     }
 
     public override ProviderId Id => ProviderId.Devin;
@@ -35,16 +38,26 @@ public sealed class DevinProvider : HttpUsageProviderBase
     protected override string Endpoint => Host + "/api/";
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     private DevinCredential? Parsed;
 
     public override async Task<ProviderReadResult> ReadAsync(
         MonitoredAccount account, ProviderReadContext context, CancellationToken cancellationToken)
     {
-        var raw = _credentialResolver(account.Label);
+        var raw = _credentialResolver(account.AccountId);
         if (string.IsNullOrWhiteSpace(raw))
-            return ProviderReadResult.Failed(ProviderReadHealth.CredentialExpired, "credential missing");
+        {
+            if (!AccountScope.IsPrimary(account))
+                return ProviderReadResult.Failed(ProviderReadHealth.CredentialExpired, "credential missing");
+            var database = _planDatabase();
+            var plan = database is null ? null : DevinPlanDatabase.Read(database);
+            if (plan is null)
+                return ProviderReadResult.Failed(ProviderReadHealth.CredentialExpired, "credential missing");
+            return ProviderReadResult.Ok(new ProviderUsage(
+                ProviderId.Devin, account.AccountId, DevinMapping.CachedWindows(plan.Raw), context.Now,
+                UsageState.Stale, plan.PlanName, null, null, UsageRoute.AppCache));
+        }
 
         Parsed = DevinCredential.Parse(raw);
         if (Parsed is null || Parsed.Paths.Count == 0)
@@ -66,6 +79,18 @@ public sealed class DevinProvider : HttpUsageProviderBase
             last = result;
         }
         return last;
+    }
+
+    private static string? DefaultPlanDatabase()
+    {
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        foreach (var name in new[] { "Devin", "Windsurf" })
+        {
+            var path = Path.Combine(roaming, name, "User", "globalStorage", "state.vscdb");
+            if (File.Exists(path)) return path;
+        }
+
+        return null;
     }
 
     private string? _pinnedPath;
@@ -223,6 +248,81 @@ public static class DevinMapping
         }
 
         return windows;
+    }
+
+    /// <summary>
+    /// A cached plan row reports remaining percent. Invert that once. A missing
+    /// percentage, or a hidden quota, draws nothing — never a zeroed ring.
+    /// </summary>
+    public static List<UsageWindow> CachedWindows(string raw)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            return CachedWindows(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    public static List<UsageWindow> CachedWindows(JsonElement root)
+    {
+        var windows = new List<UsageWindow>();
+        var hideDaily = root.TryGetProperty("hideDailyQuota", out var hideDailyValue)
+                        && hideDailyValue.ValueKind == JsonValueKind.True;
+        var hideWeekly = root.TryGetProperty("hideWeeklyQuota", out var hideWeeklyValue)
+                         && hideWeeklyValue.ValueKind == JsonValueKind.True;
+
+        if (!hideDaily && RemainingWindow(
+                "devin-daily", UsageWindowKind.Daily, 86_400,
+                Num(root, "dailyRemainingPercent"), Num(root, "dailyResetAtUnix")) is { } daily)
+            windows.Add(daily);
+
+        if (!hideWeekly && RemainingWindow(
+                "devin-weekly", UsageWindowKind.Weekly, 604_800,
+                Num(root, "weeklyRemainingPercent"), Num(root, "weeklyResetAtUnix")) is { } weekly)
+            windows.Add(weekly);
+
+        // A free plan's message pool. Negative counts mean "not applicable".
+        var total = Num(root, "totalMessages");
+        var remaining = Num(root, "remainingMessages");
+        if (total is > 0 && remaining is >= 0)
+        {
+            windows.Add(new UsageWindow(
+                Id: "devin-messages",
+                Kind: UsageWindowKind.Messages,
+                Scope: null,
+                UsedFraction: Math.Clamp((total.Value - remaining.Value) / total.Value, 0, 1),
+                WindowSeconds: 2_592_000,
+                ResetsAt: null,
+                ReportsLength: false));
+        }
+
+        return windows;
+    }
+
+    private static UsageWindow? RemainingWindow(
+        string id, UsageWindowKind kind, int seconds, double? remainingPercent, double? resetAt)
+    {
+        if (remainingPercent is not { } remaining) return null;
+        return new UsageWindow(
+            Id: id,
+            Kind: kind,
+            Scope: null,
+            UsedFraction: Math.Clamp(1 - remaining / 100, 0, 1),
+            WindowSeconds: seconds,
+            ResetsAt: FromUnix(resetAt));
+    }
+
+    /// <summary>Epoch seconds, or milliseconds when the magnitude says so.</summary>
+    private static DateTimeOffset? FromUnix(double? stamp)
+    {
+        if (stamp is not { } value || value <= 0 || double.IsNaN(value) || double.IsInfinity(value))
+            return null;
+        var milliseconds = value >= 1e11 ? value : value * 1000;
+        return DateTimeOffset.FromUnixTimeMilliseconds((long)milliseconds);
     }
 
     public static double? OverageBalance(JsonElement root)

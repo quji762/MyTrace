@@ -7,7 +7,7 @@ using Pulse.Providers.CommandCode;
 using Pulse.Providers.Copilot;
 using Pulse.Providers.Cursor;
 using Pulse.Providers.DeepSeek;
-using Pulse.Providers.Devine;
+using Pulse.Providers.Devin;
 using Pulse.Providers.Grok;
 using Pulse.Providers.GrokBot;
 using Pulse.Providers.Kimi;
@@ -27,6 +27,7 @@ namespace Pulse.Providers;
 /// All 19 upstream quota providers are registered; the browser-session routes
 /// surface their credential through paste today and isolated WebView2 later.
 /// </summary>
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public static class ProviderRegistry
 {
     /// <summary>Create adapters for every provider, reading secrets through the store.</summary>
@@ -34,10 +35,11 @@ public static class ProviderRegistry
     {
         // The resolvers bind the provider at construction; the store is keyed by
         // provider + account id and the pasted value IS the secret for these.
-        string? Resolve(ProviderId provider, string? _)
+        string? Resolve(ProviderId provider, string? accountId)
         {
-            // A blank stored value is no credential at all.
-            var secret = store.GetSecret(provider, provider.ToString());
+            // Callers pass the account id. A missing one is the primary slot.
+            var id = string.IsNullOrWhiteSpace(accountId) ? provider.ToString() : accountId;
+            var secret = store.GetSecret(provider, id);
             return string.IsNullOrWhiteSpace(secret) ? null : secret;
         }
 
@@ -48,6 +50,7 @@ public static class ProviderRegistry
                 key => Resolve(ProviderId.ClaudeCode, key), () => ClaudeCodeProvider.LocateCliToken()),
             [ProviderId.Codex] = new CodexProvider(
                 key => Resolve(ProviderId.Codex, key), () => CodexProvider.LocateCliCredentials()),
+            [ProviderId.Grok] = new GrokProvider(key => Resolve(ProviderId.Grok, key)),
 
             // Key-based routes.
             [ProviderId.DeepSeek] = new DeepSeekProvider(key => Resolve(ProviderId.DeepSeek, key)),
@@ -72,8 +75,10 @@ public static class ProviderRegistry
             // Token+org route (paste).
             [ProviderId.Devin] = new DevinProvider(key => Resolve(ProviderId.Devin, key)),
 
-            // Local language-server route (no credential: discovers the process).
-            [ProviderId.Antigravity] = new AntigravityProvider(),
+            // Local language-server route: primary discovers the process; added
+            // slots carry their own ports + CSRF and never borrow discovery.
+            [ProviderId.Antigravity] = new AntigravityProvider(
+                key => Resolve(ProviderId.Antigravity, key)),
         };
     }
 }

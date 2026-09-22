@@ -20,7 +20,7 @@ fixtures 与刷新语义；平台层（WPF/DPAPI/托盘）、安全层、UI 层�
 | 上游 | qunqin24/Pulse（macOS/SwiftUI，Apache-2.0） |
 | Windows 版 | 本仓库 `Pulse.Win/`，分支 `windows-dev` |
 | 技术栈 | .NET 10 LTS · WPF · xUnit · Microsoft.Data.Sqlite · System.Text.Json |
-| 测试 | 387 个（338 Core + 49 Provider 契约），全部基于临时目录 fixtures，绝不读写真实用户数据 |
+| 测试 | 445 个（384 Core + 49 Provider 契约 + 12 App），全部基于临时目录 fixtures，绝不读写真实用户数据 |
 | 打包 | MSIX（`.github/workflows/windows-release.yml`，`windows-v*` 标签触发） |
 
 ## 解决方案结构
@@ -44,6 +44,7 @@ Pulse.Win/
 │  └─ Pulse.Storage/        DPAPI CurrentUser vault + Windows Credential Manager
 └─ tests/
    ├─ Pulse.Core.Tests/         归一化、缓存、刷新、预测、告警、OAuth、全部 reader
+   ├─ Pulse.App.Tests/          面板组合根、版本对齐、工作区与 spend 装配
    └─ Pulse.ProviderContract.Tests/  上游 fixtures 驱动的解析契约测试
 ```
 
@@ -60,19 +61,19 @@ Pulse.Win/
   （`~/.claude/.credentials.json` 等）；会话凭据仅接受用户粘贴，**绝不解密浏览器 Cookie**。
 - 认证：GitHub Device Flow（Copilot）、OpenAI Device Code、xAI RFC 8628 设备码、
   Claude loopback OAuth、GrokBot Cursor 网页登录。
-- 多账号：Claude/Codex/Grok/GrokBot 支持设置页 "Add account"；slot 生成后永不复用。
+- 多账号：Claude/Codex/Grok/GrokBot 走各自 OAuth/网页登录；Antigravity 追加「第二路 language server 连接」（端口 + CSRF）。slot 生成后永不复用。
 - Codex app-server fallback（JSON-RPC 子进程 + rateLimits 推送）。
 
-### Token Spend 历史面板——49 个数据源已实现
+### Token Spend 历史面板——50 个数据源已实现
 
 每日 token 柱状图 + 会话列表 + 摘要行（全期/7 天 tokens/cost、最忙日、top model、
-无价模型），共 **49 个 tab**，覆盖上游全部 reader 家族：
+无价模型），共 **50 个 tab**，覆盖上游全部 reader 家族：
 
 - **会话日志族**：Pi/omp/Senpi/Kimchi、Prime Agent、Gemini CLI、Qwen Code、Amp、Droid、OpenClaw
 - **编辑器日志族**：Roo/Kilo/Cline（VS Code task log）、CodeBuddy/WorkBuddy、CherryStudio、CommandCode、OpenCodeReview、ZCode
 - **数据库族**：Hermes、Goose、Zed、Kiro、Crush（识别但零记录）、Unsloth、Antigravity CLI、MiMo Code、Devin Desktop、Devin CLI
 - **结构化日志族**：Mux、Codebuff、Freebuff（零记录裁定）、Jcode、Augment、GJC、Junie、DSH、Fx、LM Studio、Reasonix
-- **捕获导出族**：Cursor、Antigravity IDE、Trae、Warp（零记录裁定）、Hindsight、Mcode
+- **捕获导出族**：Cursor、Antigravity IDE（双布局）、Trae、Warp（零记录裁定）、Hindsight、Mcode
 - **Copilot 三车道**：OTEL / Desktop / VS Code，组合入口去重
 - **族外三 store**：OpenCode/Kilo SQLite、Grok Build、Kimi CLI
 - **原生 transcript**：Claude Code、Codex
@@ -107,19 +108,16 @@ Claude Provider 的回落读数链路。
 
 | 项 | 状态 |
 |---|---|
-| antigravity-ide 双布局 | 读取器已支持（参数切换），面板 tab 未分列 |
 | Claude Desktop 会话路由 | macOS 独有集成（Electron cookie + keychain），无 Windows 等价物 |
 | DSH zstd 解压 | .NET 无内置 zstd；压缩帧如实标 partial 而非静默清零（平台降级） |
-| OpenClaw legacy 产品树 | `.clawdbot`/`.moltbot`/`.moldbot` 三个旧目录未扫描 |
-| 部分环境变量覆盖 | `GEMINI_CLI_HOME`（Antigravity CLI 已支持）、`KIMCHI_CODING_AGENT_DIR`、`PRIME_AGENT_*` 等部分未接 |
-| 上游桌面功能 | 自动更新检查、全局快捷键、deeplink、代理设置、多语言 UI、`--json` 输出模式等未实现 |
+| 上游桌面功能 | 多语言 UI、`--json` 输出模式等未实现（更新检查/全局快捷键/deeplink/代理已落地） |
 
 ## 构建 / 运行
 
 ```bash
 cd Pulse.Win
 dotnet build Pulse.Win.slnx
-dotnet test Pulse.Win.slnx        # 387 个测试
+dotnet test Pulse.Win.slnx        # 445 个测试
 dotnet run --project src/Pulse.App
 ```
 

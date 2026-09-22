@@ -35,14 +35,14 @@ public sealed class XiaomiMiMoProvider : HttpUsageProviderBase
 
     protected override string Endpoint => Base + "/tokenPlan/usage";
 
-    /// <summary>The cookie names the console's own requests carry — only these are kept.</summary>
+    /// <summary>The cookie names the console's own requests carry �?only these are kept.</summary>
     public static readonly string[] RequiredCookies = ["api-platform_serviceToken", "userId"];
     public static readonly string[] OptionalCookies = ["api-platform_ph", "api-platform_slh"];
 
     /// <summary>
     /// A Cookie: header reduced to the names above, or an exception naming the
     /// problem. Takes what a browser store hands over OR what somebody pasted out
-    /// of their network tab; the value is checked rather than trusted — a header
+    /// of their network tab; the value is checked rather than trusted �?a header
     /// assembled from an arbitrary string is header injection if a value carries
     /// a newline.
     /// </summary>
@@ -80,7 +80,7 @@ public sealed class XiaomiMiMoProvider : HttpUsageProviderBase
     }
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     protected override HttpRequestMessage BuildRequest(string credential)
     {
@@ -162,18 +162,26 @@ public sealed class XiaomiMiMoProvider : HttpUsageProviderBase
         string path, string cookieHeader, ProviderReadContext context, CancellationToken cancellationToken)
     {
         PinnedPath = path;
+        LastBody = null;
         var result = await base.ReadAsync(
-            new MonitoredAccount { Provider = ProviderId.XiaomiMiMo, AccountId = "xiaomiMiMo" },
+            new MonitoredAccount { Provider = ProviderId.XiaomiMiMo, AccountId = ProviderId.XiaomiMiMo.ToString() },
             context with { Now = context.Now },
             cancellationToken).ConfigureAwait(false);
-        return (result.Usage is not null ? JsonDocument.Parse("{}").RootElement.Clone() : (JsonElement?)null,
+        // Only a healthy parse may surface a body — never a stale LastBody.
+        return (result.Health == ProviderReadHealth.Healthy ? LastBody : null,
             result.Health, result.Detail);
     }
 
     protected override string EndpointOrDefault => Base + (PinnedPath ?? "tokenPlan/usage");
 
-    protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now) =>
-        throw new NotSupportedException("routes are orchestrated in ReadAsync; mapping is in XiaomiMapping");
+    private JsonElement? LastBody;
+
+    protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now)
+    {
+        LastBody = document.RootElement.Clone();
+        return new ProviderUsage(ProviderId.XiaomiMiMo, account.AccountId, Array.Empty<UsageWindow>(), now,
+            UsageState.Live, null, null, null, UsageRoute.WebSession);
+    }
 }
 
 /// <summary>Static mapping core, test-driven against captured replies.</summary>
@@ -192,7 +200,7 @@ public static class XiaomiMapping
             return null;
 
         // The plan's own allowance is the first item; an empty list is an account
-        // with no plan — nil, not a zero (a ring at 0% would say "a full month left").
+        // with no plan �?nil, not a zero (a ring at 0% would say "a full month left").
         JsonElement item = default;
         var hasItem = false;
         foreach (var candidate in items.EnumerateArray())
@@ -234,7 +242,7 @@ public static class XiaomiMapping
         return (amount, currency!.Trim());
     }
 
-    /// <summary>The console's own format, in UTC — not ISO-8601.</summary>
+    /// <summary>The console's own format, in UTC �?not ISO-8601.</summary>
     public static DateTimeOffset? ParseConsoleDate(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;

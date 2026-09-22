@@ -10,5 +10,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Pulse.Core.Tests/Pulse.Core.Tests.csproj" />
     <Project Path="tests/Pulse.ProviderContract.Tests/Pulse.ProviderContract.Tests.csproj" />
+    <Project Path="tests/Pulse.App.Tests/Pulse.App.Tests.csproj" />
   </Folder>
 </Solution>

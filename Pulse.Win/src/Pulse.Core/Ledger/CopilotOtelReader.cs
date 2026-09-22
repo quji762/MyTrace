@@ -203,7 +203,7 @@ public static class CopilotOtelReader
         public DateTimeOffset Timestamp;
         public string Model = "";
         public string? SessionID;
-        public TokenTally Tally;
+        public TokenTally Tally = new();
         public int Unclassified;
         public string? Trace;
         public string? Response;

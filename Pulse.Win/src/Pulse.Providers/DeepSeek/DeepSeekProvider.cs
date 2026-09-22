@@ -32,7 +32,7 @@ public sealed class DeepSeekProvider : HttpUsageProviderBase
 
     /// <summary>Credential = user-pasted API key stored on the account label slot.</summary>
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now)
     {

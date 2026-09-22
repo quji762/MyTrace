@@ -1,5 +1,6 @@
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
+using Pulse.Core.Usage;
 
 namespace Pulse.Core.Refresh;
 
@@ -27,7 +28,10 @@ public sealed class RefreshEngine : IAsyncDisposable
 
     private readonly object _lock = new();
     private readonly Dictionary<string, DateTimeOffset> _dueTimes = new();
+    private readonly Dictionary<string, TimeSpan> _intervals = new();
     private readonly Dictionary<string, Task<ProviderReadResult>> _inFlight = new();
+    private readonly UsageCache _cache = new();
+    private readonly string? _cacheDirectory;
     private readonly SemaphoreSlim _workerGate;
 
     public RefreshEngine(
@@ -35,13 +39,16 @@ public sealed class RefreshEngine : IAsyncDisposable
         Func<MonitoredAccount, AdaptiveRefresh.Signals> signalsResolver,
         ILogger logger,
         TimeProvider? timeProvider = null,
-        int maxConcurrentReads = 3)
+        int maxConcurrentReads = 3,
+        string? cacheDirectory = null)
     {
         _providerResolver = providerResolver;
         _signalsResolver = signalsResolver;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _cacheDirectory = cacheDirectory;
         _workerGate = new SemaphoreSlim(maxConcurrentReads, maxConcurrentReads);
+        LoadDurable();
     }
 
     /// <summary>Raised after an account's reading changed (fresh read, failure state, or cache restore).</summary>
@@ -102,16 +109,19 @@ public sealed class RefreshEngine : IAsyncDisposable
         lock (_lock)
         {
             var key = Key(account);
-            _dueTimes.Remove(key);
             if (_inFlight.TryGetValue(key, out var existing))
             {
-                // Merge: an identical refresh is already running.
+                // Merge: an identical refresh is already running. Keep the due
+                // time so a later pass still sees this account as pending.
                 return false;
             }
+            _dueTimes.Remove(key);
 
             var provider = _providerResolver(account);
             if (provider is null)
             {
+                // No adapter: still reschedule so a later pass can pick it up.
+                Schedule(account);
                 return false;
             }
 
@@ -119,12 +129,27 @@ public sealed class RefreshEngine : IAsyncDisposable
             _inFlight[key] = readTask;
         }
 
-        _ = await Task.WhenAny(readTask).ConfigureAwait(false);
-        lock (_lock)
+        try
         {
-            var key = Key(account);
-            if (ReferenceEquals(_inFlight.GetValueOrDefault(key), readTask))
-                _inFlight.Remove(key);
+            await readTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                var key = Key(account);
+                if (ReferenceEquals(_inFlight.GetValueOrDefault(key), readTask))
+                    _inFlight.Remove(key);
+            }
+            // A failed persist must not leave the account unscheduled. If
+            // ReadAsync already set an adaptive due time, leave it alone.
+            lock (_lock)
+            {
+                if (!_dueTimes.ContainsKey(Key(account)))
+                {
+                    try { Schedule(account); } catch (Exception) { }
+                }
+            }
         }
         return true;
     }
@@ -161,11 +186,35 @@ public sealed class RefreshEngine : IAsyncDisposable
             result = ProviderReadResult.Failed(ProviderReadHealth.ProviderUnavailable, ex.GetType().Name);
         }
 
-        // Schedule the next pass using the adaptive interval.
+        var now = _timeProvider.GetUtcNow();
+        if (result.Health == ProviderReadHealth.Healthy && result.Usage is { } live)
+        {
+            _cache.Store(live, now);
+            try { Persist(live); } catch (Exception) { /* disk errors must not kill the pass */ }
+        }
+        else if (_cache.Get(account.Provider, account.AccountId, now) is { } cached)
+            result = result with { Usage = cached };
+
+        // Schedule the next pass using the adaptive interval. The previous
+        // decision is the input, so a quiet panel can lengthen and a hover
+        // can shorten it on the following pass.
         var signals = _signalsResolver(account);
-        var previous = AdaptiveRefresh.Floor;
+        TimeSpan previous;
+        lock (_lock)
+            previous = _intervals.GetValueOrDefault(Key(account), AdaptiveRefresh.Floor);
         var interval = AdaptiveRefresh.NextInterval(previous, signals);
-        Schedule(account, interval);
+        lock (_lock)
+            _intervals[Key(account)] = interval;
+        lock (_lock)
+        {
+            // Keep a due time a hover/refresh set while this read was running.
+            if (!_dueTimes.ContainsKey(Key(account)))
+                lock (_lock)
+        {
+            if (!_dueTimes.ContainsKey(Key(account)))
+                Schedule(account, interval);
+        }
+        }
 
         try
         {
@@ -189,7 +238,29 @@ public sealed class RefreshEngine : IAsyncDisposable
         try { await Task.WhenAll(pending).ConfigureAwait(false); }
         catch { /* shutdown: results no longer matter */ }
 
-        _workerGate.Dispose();
+        // _workerGate is left undisposed: a late ReadAsync may still WaitAsync.
+    }
+
+    private void LoadDurable()
+    {
+        if (_cacheDirectory is null || !Directory.Exists(_cacheDirectory)) return;
+        var now = _timeProvider.GetUtcNow();
+        foreach (var file in Directory.EnumerateFiles(_cacheDirectory, "*.json"))
+        {
+            var usage = DurableUsageCache.Load(file, now);
+            if (usage is not null)
+                _cache.Store(usage, now);
+        }
+    }
+
+    private void Persist(ProviderUsage usage)
+    {
+        if (_cacheDirectory is null) return;
+        Directory.CreateDirectory(_cacheDirectory);
+        var name = $"{usage.Provider}-{usage.AccountId}.json";
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+            name = name.Replace(invalid, '_');
+        DurableUsageCache.Save(Path.Combine(_cacheDirectory, name), usage);
     }
 
     private static string Key(MonitoredAccount account) =>

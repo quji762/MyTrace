@@ -239,3 +239,77 @@ public class PrimeAgentSessionReaderTests : IDisposable
         Assert.DoesNotContain(records, r => r.Tally.Input == 100);
     }
 }
+
+/// <summary>Environment overrides for the Pi-shaped family and Prime Agent,
+/// matching the store-locations contract: Pi/omp ignore `PI_CODING_AGENT_DIR`
+/// (both clients read it), Senpi and Kimchi honour their own keys, and Prime
+/// Agent relocates via `PRIME_AGENT_*` or a `settings.json` `sessionDir`.</summary>
+public class SessionRootOverrideTests : IDisposable
+{
+    private readonly string _home = Path.Combine(Path.GetTempPath(), $"pulse-roots-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_home, recursive: true); } catch (IOException) { }
+    }
+
+    [Fact]
+    public void Kimchi_And_Senpi_Honour_Their_Dir_Keys()
+    {
+        var kimchi = Path.Combine(_home, "kimchi-elsewhere");
+        var senpiSessions = Path.Combine(_home, "senpi-sessions");
+        var environment = new Dictionary<string, string?>
+        {
+            ["KIMCHI_CODING_AGENT_DIR"] = kimchi,
+            ["SENPI_CODING_SESSION_DIR"] = senpiSessions,
+        };
+
+        Assert.Equal(
+            Path.Combine(kimchi, "harness", "sessions"),
+            PiFamilySessionReader.SessionRoot("kimchi", _home, environment));
+        Assert.Equal(
+            senpiSessions,
+            PiFamilySessionReader.SessionRoot("senpi", _home, environment));
+    }
+
+    [Fact]
+    public void Pi_And_Omp_Ignore_The_Shared_Coding_Agent_Dir()
+    {
+        var environment = new Dictionary<string, string?>
+        {
+            ["PI_CODING_AGENT_DIR"] = Path.Combine(_home, "shared"),
+        };
+
+        Assert.Equal(
+            Path.Combine(_home, ".pi", "agent", "sessions"),
+            PiFamilySessionReader.SessionRoot("pi", _home, environment));
+        Assert.Equal(
+            Path.Combine(_home, ".omp", "agent", "sessions"),
+            PiFamilySessionReader.SessionRoot("omp", _home, environment));
+    }
+
+    [Fact]
+    public void Prime_Agent_Roots_Follow_Home_SessionDir_And_Settings()
+    {
+        var product = Path.Combine(_home, "prime-product");
+        Directory.CreateDirectory(product);
+        File.WriteAllText(
+            Path.Combine(product, "settings.json"),
+            """{"sessionDir":"D:/elsewhere/sessions"}""");
+
+        var fromSettings = PrimeAgentSessionReader.Roots(_home, new Dictionary<string, string?>
+        {
+            ["PRIME_AGENT_HOME"] = product,
+        });
+        Assert.Equal("D:/elsewhere/sessions", fromSettings[0]);
+        Assert.Equal(Path.Combine(product, "agent", "session-artifacts"), fromSettings[1]);
+
+        var fromEnv = PrimeAgentSessionReader.Roots(_home, new Dictionary<string, string?>
+        {
+            ["PRIME_AGENT_HOME"] = product,
+            ["PRIME_AGENT_SESSION_DIR"] = Path.Combine(_home, "env-sessions"),
+        });
+        Assert.Equal(Path.Combine(_home, "env-sessions"), fromEnv[0]);
+        Assert.Equal(Path.Combine(product, "agent", "session-artifacts"), fromEnv[1]);
+    }
+}

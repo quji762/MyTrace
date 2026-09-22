@@ -32,7 +32,7 @@ public sealed class KimiCodeProvider : HttpUsageProviderBase
     protected override string Endpoint => EndpointUrl;
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context) =>
-        _credentialResolver(account.Label);
+        _credentialResolver(account.AccountId);
 
     protected override ProviderUsage ParseSuccess(JsonDocument document, MonitoredAccount account, DateTimeOffset now)
     {

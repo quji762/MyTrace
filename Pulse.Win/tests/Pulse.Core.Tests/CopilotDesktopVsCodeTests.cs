@@ -30,7 +30,7 @@ public class CopilotDesktopReaderTests : IDisposable
     private string DbPath => Path.Combine(_home, ".copilot", "data.db");
     private string SidecarRoot => Path.Combine(_home, ".copilot", "session-state");
 
-    private void CreateDatabase(params (string Id, string Title, string Model, long Input, long Output, long Cached, long Reasoning, long CreatedMs)[] rows)
+    private void CreateDatabase(params (string Id, string? Title, string Model, long Input, long Output, long Cached, long Reasoning, long CreatedMs)[] rows)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
         using var connection = new SqliteConnection(

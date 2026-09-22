@@ -136,7 +136,7 @@ public class CherryStudioReaderTests : IDisposable
         var result = AgentUsageLedger.Build(records, prices, TimeZoneInfo.Utc);
 
         Assert.Equal(1_000_100, result.Ledger.AllTime.Tokens);
-        Assert.Equal(1, result.Sessions.Count);
+        Assert.Single(result.Sessions);
         Assert.Equal(1_000_100, result.Sessions[0].Tokens);
         Assert.Equal("s1", result.Sessions[0].Name);
         Assert.Equal("proj", result.Sessions[0].Project);

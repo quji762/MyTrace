@@ -15,10 +15,10 @@ namespace Pulse.Providers.GrokBot;
 /// Reply facts the parser depends on:
 /// - The reply states NO reset and no length (measured upstream): the seven days
 ///   are a sort key, never a length to divide by (ReportsLength: false).
-/// - An absent `usagePercent` is NOT a zero here â€” declared `opt: true` in the
+/// - An absent `usagePercent` is NOT a zero here â€?declared `opt: true` in the
 ///   schema, explicit presence, absent means unset. The OPPOSITE of Grok's rule.
 /// - Nothing included is not nothing used: an account with no allowance answers
-///   0% too â€” the account must say it has one before 0% means nothing used.
+///   0% too â€?the account must say it has one before 0% means nothing used.
 /// </summary>
 public sealed class GrokBotProvider : HttpUsageProviderBase
 {
@@ -39,7 +39,7 @@ public sealed class GrokBotProvider : HttpUsageProviderBase
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
-        var stored = _credentialResolver(account.Label);
+        var stored = _credentialResolver(account.AccountId);
         if (string.IsNullOrWhiteSpace(stored)) return null;
 
         var value = stored.Trim();
@@ -119,7 +119,7 @@ public static class GrokBotMapping
             WindowSeconds: 7 * 86400,
             ResetsAt: ParseDate(GetString(reply, "nextResetTimestampUtc")),
             ReportsLength: false,
-            IsExhausted: percent >= 100);
+            IsExhausted: false);
     }
 
     private static string? GetString(JsonElement element, string name)

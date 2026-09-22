@@ -102,7 +102,7 @@ public static class MicodeReader
                 using (var payloadDoc = JsonDocument.Parse(payload.GetRawText()))
                 {
                     var payloadElement = payloadDoc.RootElement;
-                    model = Str(payloadElement, "modelID");
+                    model = Str(payloadElement, "modelID") ?? model;
                     if (!payloadElement.TryGetProperty("time", out var time) ||
                         time.ValueKind != JsonValueKind.Object ||
                         !time.TryGetProperty("created", out var createdElement) ||
@@ -143,7 +143,7 @@ public static class MicodeReader
                     records.Add(new AgentUsageRecord
                     {
                         Timestamp = timestamp,
-                        Model = model,
+                        Model = model ?? "",
                         Tally = tally,
                         SessionID = session,
                         Project = workspace is { } ws ? Path.GetFileName(ws.TrimEnd('/', '\\')) : null,

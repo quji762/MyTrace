@@ -58,7 +58,7 @@ public class DroidSessionReaderTests : IDisposable
         WriteSettings("s2",
             """{"model":"m","providerLockTimestamp":1789981200000,"tokenUsage":{"inputTokens":1000,"outputTokens":100,"cacheReadTokens":300,"cacheCreationTokens":500,"totalTokens":1100}}""");
 
-        var record = Assert.Single(DroidSessionReader.RecordsFromRoot(_root).Where(r => r.SessionID == "s2"));
+        var record = Assert.Single(DroidSessionReader.RecordsFromRoot(_root), r => r.SessionID == "s2");
         Assert.Equal(200, record.Tally.Input); // subtracted, proven by the total
     }
 

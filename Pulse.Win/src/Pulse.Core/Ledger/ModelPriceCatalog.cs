@@ -88,8 +88,25 @@ public static class ModelPriceCatalog
             ?? new Dictionary<string, ModelPrice>();
     }
 
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
-    private static HttpClient SharedClient() => Client;
+    private static HttpClient SharedClient()
+    {
+        lock (ClientGate)
+        {
+            if (_shared is null)
+            {
+                var handler = new SocketsHttpHandler
+                {
+                    AutomaticDecompression = System.Net.DecompressionMethods.All,
+                };
+                Platform.NetworkProxy.Load().ApplyTo(handler);
+                _shared = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(30) };
+            }
+            return _shared;
+        }
+    }
+
+    private static readonly object ClientGate = new();
+    private static HttpClient? _shared;
 
     // --- the download -----------------------------------------------------
 
