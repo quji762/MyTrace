@@ -30,7 +30,31 @@ public sealed record UsageWindow(
 /// credits away rather than giving them back — so it never feeds reset
 /// detection or the countdown (upstream UsageWindow.Expiry).
 /// </summary>
-public sealed record UsageExpiry(double Amount, DateTimeOffset At);
+public sealed record UsageExpiry(double Amount, DateTimeOffset At)
+{
+    /// <summary>
+    /// The soonest packs to lapse: everything ending on the same local day as
+    /// the first one to, added up. Six packs a day apart are six dates; two an
+    /// hour apart are one, and "86 expire" beside another 100 going that same
+    /// evening would understate the day. Nil when nothing still ahead has
+    /// credits in it.
+    /// </summary>
+    public static UsageExpiry? Soonest(IEnumerable<(double Remaining, DateTimeOffset At)> packs, DateTimeOffset now)
+    {
+        var ahead = new List<(double Remaining, DateTimeOffset At)>();
+        foreach (var (remaining, at) in packs)
+        {
+            if (double.IsFinite(remaining) && remaining > 0 && at > now)
+                ahead.Add((remaining, at));
+        }
+
+        if (ahead.Count == 0) return null;
+        var soonest = ahead.Min(p => p.At);
+        var amount = ahead.Where(p => p.At.ToLocalTime().Date == soonest.ToLocalTime().Date)
+                          .Sum(p => p.Remaining);
+        return new UsageExpiry(amount, soonest);
+    }
+}
 
 /// <summary>Kind of a quota window. Mirrors upstream UsageWindow.Kind.</summary>
 public enum UsageWindowKind

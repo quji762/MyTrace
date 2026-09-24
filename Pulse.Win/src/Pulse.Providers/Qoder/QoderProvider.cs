@@ -119,13 +119,11 @@ public sealed class QoderProvider : HttpUsageProviderBase
     }
 
     /// <summary>
-    /// The soonest packs to lapse: entries of quotaDetail with credits left, not
-    /// is_active: false, and an expires_at still ahead — everything ending on
-    /// the same local day as the soonest, added up (two packs an hour apart are
-    /// one date, not an understated single pack). Details are read for their
-    /// dates only and **never allowed to cost the summary**: an entry this
-    /// cannot read is left out, and a detail list it cannot read at all is an
-    /// empty one. The plan's own entry carries <c>expires_at: 0</c>, no date.
+    /// Entries of quotaDetail with a stated end date: the pieces the summary
+    /// adds up. Details are read for their dates only and **never allowed to
+    /// cost the summary**: an entry this cannot read is left out, and a detail
+    /// list it cannot read at all is an empty one. The plan's own entry carries
+    /// <c>expires_at: 0</c>, no date.
     /// </summary>
     private static UsageExpiry? NextExpiry(JsonElement total, DateTimeOffset now)
     {
@@ -133,23 +131,18 @@ public sealed class QoderProvider : HttpUsageProviderBase
             || details.ValueKind != JsonValueKind.Array)
             return null;
 
-        var ahead = new List<(double Remaining, DateTimeOffset At)>();
+        var packs = new List<(double Remaining, DateTimeOffset At)>();
         foreach (var detail in details.EnumerateArray())
         {
             if (detail.ValueKind != JsonValueKind.Object) continue;
             if (IsExplicitFalse(detail, "isActive") || IsExplicitFalse(detail, "is_active")) continue;
             var remaining = GetDouble(detail, "remainingValue") ?? GetDouble(detail, "remaining_value");
             var expires = GetDate(detail, "expiresAt") ?? GetDate(detail, "expires_at");
-            if (remaining is not { } r || !double.IsFinite(r) || r <= 0) continue;
-            if (expires is not { } e || e <= now) continue;
-            ahead.Add((r, e));
+            if (remaining is { } r && expires is { } e)
+                packs.Add((r, e));
         }
 
-        if (ahead.Count == 0) return null;
-        var soonest = ahead.Min(p => p.At);
-        var amount = ahead.Where(p => p.At.ToLocalTime().Date == soonest.ToLocalTime().Date)
-                          .Sum(p => p.Remaining);
-        return new UsageExpiry(amount, soonest);
+        return UsageExpiry.Soonest(packs, now);
     }
 
     /// <summary>A date Qoder stated, or null: ISO 8601 text, or a Unix stamp in

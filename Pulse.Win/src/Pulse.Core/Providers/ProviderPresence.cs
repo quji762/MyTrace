@@ -6,9 +6,9 @@ namespace Pulse.Core.Providers;
 /// </summary>
 public static class ProviderPresence
 {
-    /// <summary>Ollama, Xiaomi, and Qoder have no local credential file. They stay off until a cookie is pasted.</summary>
+    /// <summary>Ollama, Xiaomi, Qoder, and StepFun have no local credential file. They stay off until a cookie is pasted.</summary>
     public static bool RequiresPastedCookie(ProviderId id) =>
-        id is ProviderId.OllamaCloud or ProviderId.XiaomiMiMo or ProviderId.Qoder;
+        id is ProviderId.OllamaCloud or ProviderId.XiaomiMiMo or ProviderId.Qoder or ProviderId.StepFun;
 
     public static IReadOnlyList<string> CandidatePaths(ProviderId id, string home, string roaming)
     {
@@ -37,6 +37,7 @@ public static class ProviderPresence
             ],
             ProviderId.Kiro => [Home(".kiro")],
             ProviderId.Qoder => [Home(".qoder")],
+            ProviderId.StepFun => [],
             ProviderId.V2EX => [Roaming("V2EX"), Home(".config", "v2ex")],
             ProviderId.Sub2API => [],
             ProviderId.NewAPI => [],

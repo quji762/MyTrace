@@ -95,6 +95,10 @@ public static class ProviderRegistry
 
             // Qoder: browser session cookie.
             [ProviderId.Qoder] = new Qoder.QoderProvider(key => Resolve(ProviderId.Qoder, key)),
+
+            // StepFun: console session (Step Plan). Two sites are separate
+            // sign-ins; the main China site is the default, as upstream's.
+            [ProviderId.StepFun] = new StepFun.StepFunProvider(key => Resolve(ProviderId.StepFun, key)),
         };
     }
 }

@@ -14,6 +14,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 **新功能**
 
 - **四个新服务商。** Qoder（浏览器会话读取订阅额度，支持国际/国内双站）、Sub2API（订阅+钱包）、New API（token 配额+余额）、V2EX（AI Chat 五小时窗口+加油包）。共 24 个额度服务商。
+- **StepFun 成为第二十五个服务商。** 读取 Step 套餐：Token 套餐的月度积分池与加油包合并为一个圆环，并显示最早到期的一批；Coding 套餐按 5 小时和每周窗口显示。凭据是浏览器会话（Oasis-Token），粘贴后只发往对应站点（默认国内站），存于本地 DPAPI 金库；账号没有套餐时清掉旧读数，不会被缓存顶回。
 - **模型价格热刷新。** `ModelPriceCatalog.RefreshAsync` 支持不重启刷新价目表。
 - **项目身份与目录名分离。** `UsageProject` 类型区分目录路径/标签/数据源三种身份，同名目录自动消歧。
 
@@ -29,6 +30,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 **New**
 
 - **Four new providers.** Qoder (browser session, international/China dual-site), Sub2API (subscription + wallet), New API (token quota + balance), V2EX (AI Chat five-hour window + top-up pack). Now 24 quota providers.
+- **StepFun is the twenty-fifth provider.** The Step Plan reads as one ring for the Token Plan's monthly pool plus top-up packs, with the soonest expiry shown; the Coding Plan shows five-hour and weekly windows. The credential is a browser session (Oasis-Token): pasted, sent only to the matching host (China site by default), stored in the local DPAPI vault; an account with no plan clears its old reading instead of letting cache bring it back.
 - **Model price hot refresh.** `ModelPriceCatalog.RefreshAsync` refreshes the price catalog without restarting.
 - **Project identity separate from directory display names.** `UsageProject` distinguishes directory/label/source identities, auto-disambiguating same-named directories.
 

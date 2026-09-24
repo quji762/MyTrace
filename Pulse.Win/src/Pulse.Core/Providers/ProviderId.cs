@@ -30,6 +30,7 @@ public enum ProviderId
     Sub2API = 21,
     NewAPI = 22,
     V2EX = 23,
+    StepFun = 24,
 }
 
 /// <summary>
