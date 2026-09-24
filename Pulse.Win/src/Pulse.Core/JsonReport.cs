@@ -84,6 +84,8 @@ public static class JsonReport
             estimated = window.Estimate is not null,
             estimatedFrom = EstimateToken(window.Estimate),
             resetsAt = window.ResetsAt?.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            expiresAt = window.Expiry?.At.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            expiringAmount = window.Expiry?.Amount,
         };
     }
 

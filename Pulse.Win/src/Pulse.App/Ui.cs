@@ -59,6 +59,10 @@ public static class Ui
     public static string ResetsOn(string when) => Zh
         ? $"重置于 {when}"
         : $"Resets {when}";
+    public static string CreditsExpire(DateTimeOffset when, double amount) => Zh
+        ? $"{when.ToLocalTime():M月d日} {amount:0.##} 积分到期"
+        : $"{amount:0.##} credits expire {when.ToLocalTime().ToString("MMM d", System.Globalization.CultureInfo.InvariantCulture)}";
+    public static string NoCredits => Zh ? "账号没有积分" : "No credits";
     public static string RunsOutInMinutes(int minutes) => Zh
         ? $"约 {minutes} 分钟后耗尽"
         : $"Runs out in {minutes} min";

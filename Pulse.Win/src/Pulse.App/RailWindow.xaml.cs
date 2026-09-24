@@ -220,6 +220,17 @@ public partial class RailWindow : Window
             ring.SetProgress(main.UsedFraction, main.IsExhausted);
             ring.ToolTip = title;
         }
+        else if (result.Health == ProviderReadHealth.Healthy
+                 && result.Usage is { State: UsageState.Unavailable, Unavailability: { Kind: UnavailabilityKind.NoCredits } } emptied)
+        {
+            // The provider stated the account holds no allowance at all: an
+            // answer, not an outage. Clear the stale figure instead of holding
+            // it — a withdrawn allowance must not survive on the rail
+            // (upstream v1.4.1).
+            _latest[key] = emptied;
+            ring.SetStale();
+            ring.ToolTip = $"{title}\n{Ui.NoCredits}";
+        }
         else if (ring.HasFigure)
         {
             // A failed or empty poll must not wipe a number the user just saw.

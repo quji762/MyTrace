@@ -21,7 +21,16 @@ public sealed record UsageWindow(
     DateTimeOffset? ResetsAt,
     bool ReportsLength = true,
     UsageEstimate? Estimate = null,
-    bool IsExhausted = false);
+    bool IsExhausted = false,
+    UsageExpiry? Expiry = null);
+
+/// <summary>
+/// Credits that leave on a date of their own (a bonus pack inside a larger
+/// allowance): how many, and when. An expiry is not a reset — it takes
+/// credits away rather than giving them back — so it never feeds reset
+/// detection or the countdown (upstream UsageWindow.Expiry).
+/// </summary>
+public sealed record UsageExpiry(double Amount, DateTimeOffset At);
 
 /// <summary>Kind of a quota window. Mirrors upstream UsageWindow.Kind.</summary>
 public enum UsageWindowKind
@@ -109,6 +118,12 @@ public enum UnavailabilityKind
     ProviderUnavailable,
     RateLimited,
     UnsupportedPlatform,
+
+    /// <summary>Appended last: persisted cache files serialize the kind as a
+    /// number, so existing values must keep their place. The provider stated a
+    /// complete answer — the account holds no allowance at all. An answer, not
+    /// an outage, and not a ring at 100% either (upstream v1.4.1).</summary>
+    NoCredits,
 }
 
 /// <summary>

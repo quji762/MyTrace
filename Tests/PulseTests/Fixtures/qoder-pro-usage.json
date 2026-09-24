@@ -1,0 +1,18 @@
+{
+  "quotaKey": "big_model_credits",
+  "status": "active",
+  "planName": "Qoder Pro",
+  "nextResetAt": "2026-10-01T00:00:00Z",
+  "totalQuota": {
+    "quotaSummary": { "usedValue": 125, "limitValue": 500, "remainingValue": 375 },
+    "quotaDetail": [
+      { "remainingValue": 86, "expiresAt": "2026-10-18T00:30:00Z", "isActive": true },
+      { "remainingValue": 14, "expiresAt": "2026-10-18T01:30:00Z", "isActive": true },
+      { "remainingValue": 100, "expiresAt": "2026-11-01T12:00:00Z", "isActive": true },
+      { "remainingValue": 50, "expiresAt": 0, "isActive": true },
+      { "remainingValue": 70, "expiresAt": "2026-09-20T00:00:00Z", "isActive": true },
+      { "remainingValue": 70, "expiresAt": "2026-10-19T00:00:00Z", "isActive": false }
+    ]
+  },
+  "sharedQuota": { "quotaSummary": { "usedValue": 0, "limitValue": 0, "remainingValue": 0 } }
+}

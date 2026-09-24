@@ -109,7 +109,9 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
 
         if (usage.Windows.Count == 0)
         {
-            stack.Children.Add(Note(Ui.NoReading, 0.55, new Thickness(0, 14, 0, 0)));
+            stack.Children.Add(Note(
+                usage.Unavailability?.Kind == UnavailabilityKind.NoCredits ? Ui.NoCredits : Ui.NoReading,
+                0.55, new Thickness(0, 14, 0, 0)));
         }
 
         foreach (var window in usage.Windows)
@@ -164,7 +166,22 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
         System.Windows.Documents.Typography.SetNumeralAlignment(percent, FontNumeralAlignment.Tabular);
         Grid.SetColumn(percent, 0);
         facts.Children.Add(percent);
-        if (window.ResetsAt is { } reset)
+        // An expiry is not a reset: it takes the reset slot only when it comes
+        // before the reset, or there is none (upstream v1.4.1).
+        if (window.Expiry is { } expiry && (window.ResetsAt is not { } deadline || expiry.At < deadline))
+        {
+            var lapsing = new TextBlock
+            {
+                Text = Ui.CreditsExpire(expiry.At, Math.Round(expiry.Amount)),
+                FontFamily = Face,
+                FontSize = DesignTokens.TypeCaption,
+                Opacity = 0.5,
+                Foreground = Brush("MutedForeground", Color.FromRgb(0x9A, 0x9A, 0x9A)),
+            };
+            Grid.SetColumn(lapsing, 1);
+            facts.Children.Add(lapsing);
+        }
+        else if (window.ResetsAt is { } reset)
         {
             var when = new TextBlock
             {

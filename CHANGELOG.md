@@ -22,6 +22,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **V2EX 窗口语义。** `active: false` 不报 reset 时间和窗口长度；`extra_usage` 加油包作为独立 TopUp 窗口；`remaining` 缺失不视为花完。
 - **Qoder 双池分离。** `totalQuota`（个人额度）和 `sharedQuota`（团队池）各自独立成环，绝不合并。
 - **崩溃与诊断日志不落凭据。** 崩溃日志的异常消息与堆栈先经脱敏器清洗再写入，并有 5 MB 滚动上限；滚动诊断日志接入同一个脱敏关卡；凭据库读写的每个密钥都会注册为脱敏字面量，任何日志路径都不会出现凭据原文。
+- **Qoder 积分包到期日与无积分状态。** 卡片在重置时间的位置显示最早到期的一批积分（同一天的合并计算），`--json` 新增 `expiresAt` 与 `expiringAmount`；账号确认没有任何积分时清掉内存与磁盘上的旧读数，不再被缓存或重启顶回。字段同时兼容国际站的驼峰与国内站的蛇形混排。
 
 **English**
 
@@ -36,6 +37,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **V2EX window semantics.** `active: false` reports no reset time or window length; `extra_usage` packs are independent TopUp windows; missing `remaining` is not spent.
 - **Qoder dual-pool separation.** `totalQuota` (personal) and `sharedQuota` (team) are separate rings, never summed.
 - **Crash and diagnostic logs cannot hold credentials.** Crash exception text and stack traces pass the secret scrubber before reaching disk, with a 5 MB rolling cap; the rolling diagnostic file log goes through the same redacting choke point; every secret read from or written to the vault is registered as a scrubber literal, so no log path can ever show a raw credential.
+- **Qoder pack expiry and the no-credits state.** The card's reset slot shows the soonest packs to lapse (same-day packs summed), and `--json` gains `expiresAt` / `expiringAmount`; an account confirmed to hold no credits clears its previous reading from memory and disk instead of letting cache or a relaunch bring it back. Both the international camelCase and the mainland's mixed snake_case spellings are accepted.
 
 ## 1.3.1
 

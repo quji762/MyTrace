@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Pulse.Core.Accounts;
 using Pulse.Core.Providers;
@@ -13,6 +14,8 @@ namespace Pulse.Providers.Qoder;
 /// key): it is stored in the local DPAPI vault and sent only as an
 /// Authorization: Bearer header over HTTPS to qoder.com or qoder.com.cn.
 /// totalQuota is the account's own; sharedQuota is a team pool. Two rings, never one sum.
+/// Both spellings are accepted per field: the mainland reply mixes them
+/// (nextResetAt in camelCase beside total_quota in snake_case).
 /// </summary>
 public sealed class QoderProvider : HttpUsageProviderBase
 {
@@ -41,34 +44,139 @@ public sealed class QoderProvider : HttpUsageProviderBase
     {
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object) throw new SchemaException("root is not an object");
+
         var windows = new List<UsageWindow>();
 
-        if (root.TryGetProperty("totalQuota", out var tq) && tq.ValueKind == JsonValueKind.Object)
-            AddPool(windows, tq, "total", "Total");
-        if (root.TryGetProperty("sharedQuota", out var sq) && sq.ValueKind == JsonValueKind.Object)
-            AddPool(windows, sq, "shared", "Shared");
+        // The personal summary must be stated and readable; its absence is a
+        // schema change, not proof that no allowance remains.
+        if (!TryGet(root, "totalQuota", "total_quota", out var total) || total.ValueKind != JsonValueKind.Object)
+            throw new SchemaException("missing totalQuota summary");
+        if (!TryGetPool(total, out var personal))
+            throw new SchemaException("unreadable totalQuota summary");
 
-        if (windows.Count == 0) throw new SchemaException("no limits reported");
-        return new ProviderUsage(ProviderId.Qoder, account.AccountId, windows,
-            now, UsageState.Live, GetString(root, "planName"), null, null, UsageRoute.WebSession);
+        // A limit of zero is not drawn: no ring at 100% for an allowance never
+        // granted. A positive limit stays a reading even at zero remaining.
+        if (personal.Limit > 0)
+        {
+            var remaining = GetDouble(personal.Summary, "remainingValue") ?? GetDouble(personal.Summary, "remaining_value");
+            var exhausted = remaining is { } r && double.IsFinite(r)
+                ? r <= 0
+                : personal.Used >= personal.Limit;
+            windows.Add(new UsageWindow("total", UsageWindowKind.Monthly, "Total",
+                Math.Clamp(personal.Used / personal.Limit, 0, 1), 30 * 86_400,
+                null, false, null, exhausted)
+            { Expiry = NextExpiry(total, now) });
+        }
+
+        // An absent team pool is normal; an unreadable one is not proof that no
+        // allowance remains. Only a valid zero pool is omitted.
+        if (TryGet(root, "sharedQuota", "shared_quota", out var sharedContainer)
+            && sharedContainer.ValueKind == JsonValueKind.Object)
+        {
+            if (!TryGetPool(sharedContainer, out var shared))
+                throw new SchemaException("unreadable sharedQuota summary");
+            if (shared.Limit > 0)
+            {
+                var remaining = GetDouble(shared.Summary, "remainingValue") ?? GetDouble(shared.Summary, "remaining_value");
+                var exhausted = remaining is { } r && double.IsFinite(r)
+                    ? r <= 0
+                    : shared.Used >= shared.Limit;
+                windows.Add(new UsageWindow("shared", UsageWindowKind.Monthly, "Shared",
+                    Math.Clamp(shared.Used / shared.Limit, 0, 1), 30 * 86_400,
+                    null, false, null, exhausted));
+            }
+        }
+
+        // A complete answer: the account holds no allowance at all. Storing it
+        // clears the account's previous reading from memory and disk, so a
+        // later failure, relaunch, or --json export cannot restore an allowance
+        // Qoder has withdrawn (upstream v1.4.1).
+        if (windows.Count == 0)
+            return new ProviderUsage(ProviderId.Qoder, account.AccountId, windows, now,
+                UsageState.Unavailable, GetString(root, "planName"), null, null, UsageRoute.WebSession)
+            { Unavailability = new Unavailability(UnavailabilityKind.NoCredits) };
+
+        return new ProviderUsage(ProviderId.Qoder, account.AccountId, windows, now,
+            UsageState.Live, GetString(root, "planName"), null, null, UsageRoute.WebSession);
     }
 
-    private static void AddPool(List<UsageWindow> windows, JsonElement pool, string id, string scope)
+    private readonly record struct QoderPool(double Used, double Limit, JsonElement Summary);
+
+    /// <summary>A summary Qoder stated in full, or false. Negative figures are not
+    /// a summary anybody stated; they mean the reply was misread.</summary>
+    private static bool TryGetPool(JsonElement container, out QoderPool pool)
     {
-        if (!pool.TryGetProperty("quotaSummary", out var s) || s.ValueKind != JsonValueKind.Object) return;
-        var used = GetDouble(s, "usedValue") ?? GetDouble(s, "used_value");
-        var limit = GetDouble(s, "limitValue") ?? GetDouble(s, "limit_value");
-        if (limit is not { } l || l <= 0 || used is not { } u) return;
-        windows.Add(new UsageWindow(id, UsageWindowKind.Monthly, scope,
-            Math.Clamp(u / l, 0, 1), 30 * 86_400, null, false, null, u >= l));
+        pool = default;
+        if (!TryGet(container, "quotaSummary", "quota_summary", out var summary)
+            || summary.ValueKind != JsonValueKind.Object)
+            return false;
+        var used = GetDouble(summary, "usedValue") ?? GetDouble(summary, "used_value");
+        var limit = GetDouble(summary, "limitValue") ?? GetDouble(summary, "limit_value");
+        if (used is not { } u || !double.IsFinite(u) || u < 0) return false;
+        if (limit is not { } l || !double.IsFinite(l) || l < 0) return false;
+        pool = new QoderPool(u, l, summary);
+        return true;
     }
 
-    private static double? ReadDouble(JsonElement e, string name)
+    /// <summary>
+    /// The soonest packs to lapse: entries of quotaDetail with credits left, not
+    /// is_active: false, and an expires_at still ahead — everything ending on
+    /// the same local day as the soonest, added up (two packs an hour apart are
+    /// one date, not an understated single pack). Details are read for their
+    /// dates only and **never allowed to cost the summary**: an entry this
+    /// cannot read is left out, and a detail list it cannot read at all is an
+    /// empty one. The plan's own entry carries <c>expires_at: 0</c>, no date.
+    /// </summary>
+    private static UsageExpiry? NextExpiry(JsonElement total, DateTimeOffset now)
     {
-        if (!e.TryGetProperty(name, out var v)) return null;
-        return v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d) ? d : null;
+        if (!TryGet(total, "quotaDetail", "quota_detail", out var details)
+            || details.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var ahead = new List<(double Remaining, DateTimeOffset At)>();
+        foreach (var detail in details.EnumerateArray())
+        {
+            if (detail.ValueKind != JsonValueKind.Object) continue;
+            if (IsExplicitFalse(detail, "isActive") || IsExplicitFalse(detail, "is_active")) continue;
+            var remaining = GetDouble(detail, "remainingValue") ?? GetDouble(detail, "remaining_value");
+            var expires = GetDate(detail, "expiresAt") ?? GetDate(detail, "expires_at");
+            if (remaining is not { } r || !double.IsFinite(r) || r <= 0) continue;
+            if (expires is not { } e || e <= now) continue;
+            ahead.Add((r, e));
+        }
+
+        if (ahead.Count == 0) return null;
+        var soonest = ahead.Min(p => p.At);
+        var amount = ahead.Where(p => p.At.ToLocalTime().Date == soonest.ToLocalTime().Date)
+                          .Sum(p => p.Remaining);
+        return new UsageExpiry(amount, soonest);
     }
 
-    private static string? ReadString(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    /// <summary>A date Qoder stated, or null: ISO 8601 text, or a Unix stamp in
+    /// seconds or milliseconds; zero is no date.</summary>
+    private static DateTimeOffset? GetDate(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value)) return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt64(out var stamp) && stamp > 0 =>
+                stamp > 10_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(stamp)
+                    : DateTimeOffset.FromUnixTimeSeconds(stamp),
+            JsonValueKind.String when value.GetString() is { } text
+                && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
+    /// <summary>Absent or null counts as active; only an explicit false is out.</summary>
+    private static bool IsExplicitFalse(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.False;
+
+    /// <summary>Either spelling of a field, whichever the site replied with.</summary>
+    private static bool TryGet(JsonElement element, string camel, string snake, out JsonElement value)
+    {
+        if (element.TryGetProperty(camel, out value)) return true;
+        return element.TryGetProperty(snake, out value);
+    }
 }
