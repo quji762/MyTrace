@@ -209,11 +209,7 @@ public sealed class RefreshEngine : IAsyncDisposable
         {
             // Keep a due time a hover/refresh set while this read was running.
             if (!_dueTimes.ContainsKey(Key(account)))
-                lock (_lock)
-        {
-            if (!_dueTimes.ContainsKey(Key(account)))
                 Schedule(account, interval);
-        }
         }
 
         try
@@ -245,22 +241,37 @@ public sealed class RefreshEngine : IAsyncDisposable
     {
         if (_cacheDirectory is null || !Directory.Exists(_cacheDirectory)) return;
         var now = _timeProvider.GetUtcNow();
-        foreach (var file in Directory.EnumerateFiles(_cacheDirectory, "*.json"))
+        try
         {
-            var usage = DurableUsageCache.Load(file, now);
-            if (usage is not null)
-                _cache.Store(usage, now);
+            foreach (var file in Directory.EnumerateFiles(_cacheDirectory, "*.json"))
+            {
+                var usage = DurableUsageCache.Load(file, now);
+                if (usage is not null)
+                    _cache.Store(usage, now);
+            }
+        }
+        catch (Exception)
+        {
+            // A cache read failure (permissions, lock, corruption) must never
+            // crash the app. The cache is optional: a cold start is fine.
         }
     }
 
     private void Persist(ProviderUsage usage)
     {
         if (_cacheDirectory is null) return;
-        Directory.CreateDirectory(_cacheDirectory);
-        var name = $"{usage.Provider}-{usage.AccountId}.json";
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-            name = name.Replace(invalid, '_');
-        DurableUsageCache.Save(Path.Combine(_cacheDirectory, name), usage);
+        try
+        {
+            Directory.CreateDirectory(_cacheDirectory);
+            var name = $"{usage.Provider}-{usage.AccountId}.json";
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                name = name.Replace(invalid, '_');
+            DurableUsageCache.Save(Path.Combine(_cacheDirectory, name), usage);
+        }
+        catch (Exception)
+        {
+            // A cache write failure must not crash the app.
+        }
     }
 
     private static string Key(MonitoredAccount account) =>

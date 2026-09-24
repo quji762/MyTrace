@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:app="clr-namespace:Pulse.App"
         Title="Pulse"
-        Width="760" Height="680"
-        MinWidth="640" MinHeight="480"
+        Width="780" Height="700"
+        MinWidth="660" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource SettingsBackground}"
         Foreground="{DynamicResource RailForeground}"
@@ -29,18 +29,18 @@
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="{DynamicResource SidebarBackground}">
-            <StackPanel Margin="22,28,18,24">
-                <TextBlock Text="Pulse" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock x:Name="BrandCaption" Text="Usage on this PC" FontSize="12" Opacity="0.5" Margin="0,4,0,28" />
+            <StackPanel Margin="24,30,20,24">
+                <TextBlock Text="Pulse" FontSize="24" FontWeight="SemiBold" />
+                <TextBlock x:Name="BrandCaption" Text="Usage on this PC" FontSize="12" Opacity="0.45" Margin="0,5,0,32" />
                 <TextBlock x:Name="RailNavLabel" Text="Rail" FontSize="13" FontWeight="SemiBold" />
                 <TextBlock x:Name="RailNavHint" Text="A ring for each provider that is on. The colour is how close the limit is."
-                           FontSize="12" Opacity="0.55" TextWrapping="Wrap" Margin="0,6,0,18" />
+                           FontSize="12" Opacity="0.5" TextWrapping="Wrap" Margin="0,7,0,18" />
                 <TextBlock x:Name="RailNavHint2" Text="Right-click the rail for this window, token spend, or to quit."
-                           FontSize="12" Opacity="0.55" TextWrapping="Wrap" />
+                           FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 
-        <Grid Grid.Column="1" Margin="22,20,22,16">
+        <Grid Grid.Column="1" Margin="26,22,26,18">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
@@ -147,6 +147,8 @@
                                       Margin="0,14,0,0" Checked="OnSpendToggled" Unchecked="OnSpendToggled" />
                             <CheckBox x:Name="HotkeyToggle" Content="Global hotkey Ctrl+Alt+P toggles the rail"
                                       Margin="0,14,0,0" Checked="OnHotkeyToggled" Unchecked="OnHotkeyToggled" />
+                            <CheckBox x:Name="HideTrayToggle" Content="Hide the system tray icon"
+                                      Margin="0,14,0,0" Checked="OnHideTrayToggled" Unchecked="OnHideTrayToggled" />
                             <Button x:Name="SignInCopilotButton" Content="Sign in to GitHub Copilot" Margin="0,14,0,0"
                                     HorizontalAlignment="Left" Click="OnCopilotSignIn" />
 

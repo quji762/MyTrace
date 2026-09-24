@@ -13,10 +13,10 @@ public static class UsagePaint
     public const double Caution = 0.5;
     public const double Warning = 0.75;
 
-    public static readonly Color Good = Color.FromRgb(0x00, 0xE6, 0x8C);
-    public static readonly Color Amber = Color.FromRgb(0xFF, 0xC2, 0x26);
-    public static readonly Color WarningRed = Color.FromRgb(0xFF, 0x4F, 0x42);
-    public static readonly Color Spent = Color.FromRgb(0xD9, 0x17, 0x21);
+    public static readonly Color Good = Color.FromRgb(0x34, 0xD3, 0x99);
+    public static readonly Color Amber = Color.FromRgb(0xFB, 0xBF, 0x24);
+    public static readonly Color WarningRed = Color.FromRgb(0xF8, 0x71, 0x71);
+    public static readonly Color Spent = Color.FromRgb(0xE6, 0x39, 0x46);
 
     public static Color For(double usedFraction, bool exhausted, double warningAt = Warning)
     {

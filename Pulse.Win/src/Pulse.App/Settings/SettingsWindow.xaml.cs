@@ -27,13 +27,21 @@ public partial class SettingsWindow : Window
     private bool _launchAtStartup = WindowsIntegration.IsLaunchAtStartupEnabled();
     private bool _loading = true;
 
-    public sealed class CredentialRow
+    public sealed class CredentialRow : System.ComponentModel.INotifyPropertyChanged
     {
         public ProviderId Provider { get; init; }
         public string DisplayName { get; init; } = "";
         public string Secret { get; set; } = "";
-        public bool Enabled { get; set; }
         public bool HasStoredValue { get; init; }
+
+        private bool _enabled;
+        public bool Enabled
+        {
+            get => _enabled;
+            set { _enabled = value; PropertyChanged?.Invoke(this, new(nameof(Enabled))); }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     }
 
     public sealed class ExtraAccountRow
@@ -82,6 +90,7 @@ public partial class SettingsWindow : Window
         // Setting SelectedIndex must not re-enter the change handlers.
         _loading = true;
         HotkeyToggle.IsChecked = Pulse.Core.Platform.HotkeyPreferences.Load();
+        HideTrayToggle.IsChecked = Pulse.Core.Platform.TrayPreferences.Load();
         var proxy = Pulse.Core.Platform.NetworkProxy.Load();
         ProxyModeChoice.SelectedIndex = proxy.Mode == Pulse.Core.Platform.ProxyMode.Manual ? 1 : 0;
         ProxyHostBox.Text = proxy.Host ?? "";
@@ -124,6 +133,7 @@ public partial class SettingsWindow : Window
         StartupToggle.Content = Ui.LaunchAtStartup;
         SpendToggle.Content = Ui.ReadSpend;
         HotkeyToggle.Content = Ui.GlobalHotkey;
+        HideTrayToggle.Content = Ui.HideTrayIcon;
         AlertsLabelBlock.Text = Ui.AlertsLabel;
         AlertOffItem.Content = Ui.AlertOff;
         Alert80Item.Content = Ui.Alert80;
@@ -164,6 +174,23 @@ public partial class SettingsWindow : Window
         Pulse.Core.Platform.HotkeyPreferences.Save(HotkeyToggle.IsChecked == true);
         if (System.Windows.Application.Current is App app)
             app.ApplyHotkeyPreference();
+    }
+
+    private void OnHideTrayToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading || HideTrayToggle is null) return;
+        var hide = HideTrayToggle.IsChecked == true;
+        if (System.Windows.Application.Current is App app)
+        {
+            // Safety invariant: at least one entry point must remain visible.
+            // App.ApplyTrayPreference enforces this and may un-check the toggle.
+            app.ApplyTrayPreference(hide);
+            HideTrayToggle.IsChecked = Pulse.Core.Platform.TrayPreferences.Load();
+        }
+        else
+        {
+            Pulse.Core.Platform.TrayPreferences.Save(hide);
+        }
     }
 
     private void OnProxyModeChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -318,13 +345,27 @@ public partial class SettingsWindow : Window
 
     private void OnProviderToggled(object sender, RoutedEventArgs e)
     {
-        if (_loading || sender is not System.Windows.Controls.CheckBox { DataContext: CredentialRow row })
+        if (_loading || sender is not System.Windows.Controls.CheckBox { DataContext: CredentialRow row } cb)
             return;
+        // Read IsChecked directly from the CheckBox — the two-way binding may
+        // not have written back to row.Enabled yet when this event fires.
+        var enabled = cb.IsChecked == true;
+        row.Enabled = enabled;
         var overrides = new Dictionary<ProviderId, bool>(ProviderEnablement.LoadOverrides(EnablementPath()))
         {
-            [row.Provider] = row.Enabled,
+            [row.Provider] = enabled,
         };
         ProviderEnablement.SaveOverrides(EnablementPath(), overrides);
+
+        // Immediately reflect on the rail: remove the ring when disabling,
+        // or clear the denied key when re-enabling so the ring can return.
+        if (System.Windows.Application.Current is App app)
+        {
+            if (enabled)
+                app.NotifyProviderEnabled(row.Provider);
+            else
+                app.NotifyProviderDisabled(row.Provider);
+        }
     }
 
     private void OnSaveCredential(object sender, RoutedEventArgs e)

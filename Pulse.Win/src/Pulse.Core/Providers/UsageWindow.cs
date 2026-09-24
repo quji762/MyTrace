@@ -34,6 +34,7 @@ public enum UsageWindowKind
     Messages,
     Monthly,
     Other,
+    TopUp,
 }
 
 /// <summary>

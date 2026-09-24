@@ -11,6 +11,7 @@ using Pulse.Providers.Devin;
 using Pulse.Providers.Grok;
 using Pulse.Providers.GrokBot;
 using Pulse.Providers.Kimi;
+using Pulse.Providers.Kiro;
 using Pulse.Providers.MiniMax;
 using Pulse.Providers.Ollama;
 using Pulse.Providers.OpenCodeGo;
@@ -24,7 +25,7 @@ namespace Pulse.Providers;
 /// The provider registry: one adapter per supported ProviderId, all fed by the
 /// same credential store. A missing adapter = a provider the build does not yet
 /// support; the refresh engine skips it silently rather than erroring.
-/// All 19 upstream quota providers are registered; the browser-session routes
+/// All 20 upstream quota providers are registered; the browser-session routes
 /// surface their credential through paste today and isolated WebView2 later.
 /// </summary>
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -79,6 +80,21 @@ public static class ProviderRegistry
             // slots carry their own ports + CSRF and never borrow discovery.
             [ProviderId.Antigravity] = new AntigravityProvider(
                 key => Resolve(ProviderId.Antigravity, key)),
+
+            // CLI ACP route: short-lived `kiro-cli acp` with its saved login.
+            [ProviderId.Kiro] = new KiroProvider(),
+
+            // V2EX: documented API with Personal Access Token.
+            [ProviderId.V2EX] = new V2EX.V2EXProvider(key => Resolve(ProviderId.V2EX, key)),
+
+            // Sub2API: subscription + wallet.
+            [ProviderId.Sub2API] = new Sub2API.Sub2APIProvider(key => Resolve(ProviderId.Sub2API, key)),
+
+            // New API: token quota + balance.
+            [ProviderId.NewAPI] = new NewAPI.NewAPIProvider(key => Resolve(ProviderId.NewAPI, key)),
+
+            // Qoder: browser session cookie.
+            [ProviderId.Qoder] = new Qoder.QoderProvider(key => Resolve(ProviderId.Qoder, key)),
         };
     }
 }

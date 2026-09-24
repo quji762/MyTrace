@@ -26,6 +26,8 @@ public partial class RailWindow : Window
 
     private readonly Dictionary<string, RingControl> _rings = new();
     private readonly Dictionary<string, ProviderUsage> _latest = new();
+    private readonly HashSet<string> _deniedKeys = new();
+    private readonly DispatcherTimer _hoverCloseTimer;
 
     /// <summary>One ring per monitored account, not per provider — two Claude
     /// logins must not overwrite each other.</summary>
@@ -116,6 +118,17 @@ public partial class RailWindow : Window
         };
         _hoverCard.PointerEntered += () => _collapseTimer.Stop();
         _hoverCard.PointerLeft += ScheduleCollapse;
+
+        // Close the hover card shortly after the pointer leaves a ring, with a
+        // grace period so the pointer can travel into the card without flicker.
+        _hoverCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _hoverCloseTimer.Tick += (_, _) =>
+        {
+            _hoverCloseTimer.Stop();
+            _hoverCard.IsOpen = false;
+        };
+        _hoverCard.PointerLeft += () => _hoverCloseTimer.Start();
+        _hoverCard.PointerEntered += () => _hoverCloseTimer.Stop();
     }
 
     private static System.Windows.Controls.MenuItem MenuItem(string title, Action action)
@@ -182,8 +195,18 @@ public partial class RailWindow : Window
 
         if (!_rings.TryGetValue(key, out var ring))
         {
+            // Do not create rings for accounts the user has disabled —
+            // a late in-flight read must not re-add a removed provider.
+            if (_deniedKeys.Contains(key)) return;
             ring = new RingControl(account.Provider);
-            ring.MouseEnter += (_, _) => ShowHover(key, title, ring);
+            // Use a closure that reads the current title at hover time,
+            // not the one captured at ring creation.
+            ring.MouseEnter += (_, _) =>
+            {
+                if (_latest.TryGetValue(key, out var u))
+                    _hoverCard.ShowFor(u, ring, _preferences.DockedEdge != "left", TitleOf(account));
+            };
+            ring.MouseLeave += (_, _) => _hoverCloseTimer.Start();
             ring.ToolTip = title;
             _rings[key] = ring;
             RingHost.Children.Add(ring);
@@ -225,6 +248,85 @@ public partial class RailWindow : Window
 
     public RingControl? RingFor(MonitoredAccount account) =>
         _rings.TryGetValue(Key(account), out var ring) ? ring : null;
+
+    /// <summary>Remove one account's ring from the rail (provider disabled).</summary>
+    public void RemoveProvider(MonitoredAccount account)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => RemoveProvider(account));
+            return;
+        }
+
+        var key = Key(account);
+        _deniedKeys.Add(key);
+        if (!_rings.Remove(key, out var ring)) return;
+        RingHost.Children.Remove(ring);
+        _latest.Remove(key);
+        Fit();
+    }
+
+    /// <summary>Remove ALL rings for a provider (primary + added accounts) and deny re-creation.</summary>
+    public void RemoveProviderAll(ProviderId provider)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => RemoveProviderAll(provider));
+            return;
+        }
+
+        var prefix = $"{provider}:";
+        var toRemove = _rings.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+        foreach (var key in toRemove)
+        {
+            _deniedKeys.Add(key);
+            if (_rings.Remove(key, out var ring))
+            {
+                RingHost.Children.Remove(ring);
+                _latest.Remove(key);
+            }
+        }
+        if (toRemove.Count > 0) Fit();
+    }
+
+    /// <summary>Clear denied keys for a provider so its rings can return.</summary>
+    public void AllowProviderAll(ProviderId provider)
+    {
+        var prefix = $"{provider}:";
+        _deniedKeys.RemoveWhere(k => k.StartsWith(prefix, StringComparison.Ordinal));
+    }
+
+    /// <summary>Re-enable a previously denied account key.</summary>
+    public void AllowProvider(MonitoredAccount account)
+    {
+        _deniedKeys.Remove(Key(account));
+    }
+
+    /// <summary>Sync rings with the given active accounts: remove stale, allow current.</summary>
+    public void SyncActiveProviders(IReadOnlyList<MonitoredAccount> activeAccounts)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => SyncActiveProviders(activeAccounts));
+            return;
+        }
+
+        var activeKeySet = activeAccounts.Select(Key).ToHashSet();
+        // Keys in the denied set that are now active again get cleared.
+        _deniedKeys.RemoveWhere(k => activeKeySet.Contains(k));
+
+        var stale = _rings.Keys.Where(k => !activeKeySet.Contains(k)).ToList();
+        foreach (var key in stale)
+        {
+            if (_rings.Remove(key, out var ring))
+            {
+                RingHost.Children.Remove(ring);
+                _latest.Remove(key);
+                _deniedKeys.Add(key); // suppress late in-flight reads
+            }
+        }
+        if (stale.Count > 0) Fit();
+    }
 
     private void Fit()
     {
@@ -342,6 +444,7 @@ public partial class RailWindow : Window
         if (_collapsed) return;
         _collapsed = true;
         _hoverCard.IsOpen = false;
+        _hoverCloseTimer.Stop();
         RingScroll.Visibility = Visibility.Collapsed;
         EmptyMark.Visibility = Visibility.Collapsed;
         var area = AreaFor(_preferences.MonitorDeviceName);
@@ -406,11 +509,12 @@ public partial class RailWindow : Window
         ReleaseMouseCapture();
 
         // Dock to whichever edge we snapped against, then persist normalized.
+        // Do NOT ScheduleCollapse here — the mouse is still over the rail after
+        // a click. Collapse is MouseLeave's job.
         var area = AreaUnderPointer();
         if (Left - area.Left < SnapThreshold) _preferences.DockedEdge = "left";
         else if (area.Right - (Left + Width) < SnapThreshold) _preferences.DockedEdge = "right";
         PersistPosition();
-        ScheduleCollapse();
     }
 
     private void SnapToEdges()

@@ -7,6 +7,66 @@ shows in the update window — see [Scripts/changelog.py](Scripts/changelog.py).
 Add the entry **before** tagging, in the small grammar the converter knows:
 bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 
+## 1.4.1
+
+**中文**
+
+**新功能**
+
+- **四个新服务商。** Qoder（浏览器会话读取订阅额度，支持国际/国内双站）、Sub2API（订阅+钱包）、New API（token 配额+余额）、V2EX（AI Chat 五小时窗口+加油包）。共 24 个额度服务商。
+- **模型价格热刷新。** `ModelPriceCatalog.RefreshAsync` 支持不重启刷新价目表。
+- **项目身份与目录名分离。** `UsageProject` 类型区分目录路径/标签/数据源三种身份，同名目录自动消歧。
+
+**改进与修复**
+
+- **V2EX 窗口语义。** `active: false` 不报 reset 时间和窗口长度；`extra_usage` 加油包作为独立 TopUp 窗口；`remaining` 缺失不视为花完。
+- **Qoder 双池分离。** `totalQuota`（个人额度）和 `sharedQuota`（团队池）各自独立成环，绝不合并。
+- **崩溃与诊断日志不落凭据。** 崩溃日志的异常消息与堆栈先经脱敏器清洗再写入，并有 5 MB 滚动上限；滚动诊断日志接入同一个脱敏关卡；凭据库读写的每个密钥都会注册为脱敏字面量，任何日志路径都不会出现凭据原文。
+
+**English**
+
+**New**
+
+- **Four new providers.** Qoder (browser session, international/China dual-site), Sub2API (subscription + wallet), New API (token quota + balance), V2EX (AI Chat five-hour window + top-up pack). Now 24 quota providers.
+- **Model price hot refresh.** `ModelPriceCatalog.RefreshAsync` refreshes the price catalog without restarting.
+- **Project identity separate from directory display names.** `UsageProject` distinguishes directory/label/source identities, auto-disambiguating same-named directories.
+
+**Changed and fixed**
+
+- **V2EX window semantics.** `active: false` reports no reset time or window length; `extra_usage` packs are independent TopUp windows; missing `remaining` is not spent.
+- **Qoder dual-pool separation.** `totalQuota` (personal) and `sharedQuota` (team) are separate rings, never summed.
+- **Crash and diagnostic logs cannot hold credentials.** Crash exception text and stack traces pass the secret scrubber before reaching disk, with a 5 MB rolling cap; the rolling diagnostic file log goes through the same redacting choke point; every secret read from or written to the vault is registered as a scrubber literal, so no log path can ever show a raw credential.
+
+## 1.3.1
+
+**中文**
+
+**新功能**
+
+- **Kiro 成为第二十个服务商。** Pulse 通过 Kiro CLI 自带的 ACP 接口读取当前账号的方案与额度，无需额外登录或复制凭据；同一响应里的多个额度会分别显示，并保持稳定的账号身份。
+- **菜单栏图标可以隐藏。** 可只用浮动栏或全局快捷键进入 Pulse。设置会保证始终至少留有一个可用入口。
+
+**改进与修复**
+
+- **未选择显示的服务不会再偷偷读取。** Pulse 只扫描已监控服务的本机 CLI 活动；关闭显示的服务在设置里明确标为"未显示"。
+- **Kiro 额度顺序变化不再打乱账号。** 额度身份改用 Kiro 返回的资源类型，不再依赖数组位置，因此重排后仍会保留各自的显示设置和历史。
+- **修复辅助进程重启后的错误超时。** Codex 和 Kiro 的旧请求计时器不会再结束新一轮同编号请求，也不会让已经完成的请求留下延迟报错。
+- **隐藏菜单栏图标时不会把自己锁在应用外。** 如果浮动栏不可用且快捷键没有成功注册，Pulse 会自动恢复菜单栏入口。
+
+**English**
+
+**New**
+
+- **Kiro is the twentieth provider.** Pulse reads the current plan and allowances through the ACP service built into Kiro CLI, with no extra sign-in or copied credential. Multiple allowances in one response remain separate and keep stable account identities.
+- **The menu bar icon can be hidden.** Pulse can be reached through the floating rail or global shortcuts alone. Settings always preserve at least one working entry point.
+
+**Changed and fixed**
+
+- **Providers that are not selected are no longer read.** Pulse scans local CLI activity only for watched providers. A hidden provider is labelled "Not shown" in Settings.
+- **Kiro allowance ordering no longer changes account identity.** Allowances use the resource type returned by Kiro instead of their array position, preserving display choices and history when the response is reordered.
+- **Fixed false timeouts after helper restarts.** Old Codex and Kiro request timers can no longer finish a newer request that reused the same identifier, or report a late failure after a request already completed.
+- **Hiding the menu bar icon cannot lock the user out.** Pulse restores the menu bar entry if the rail is unavailable and no shortcut registered successfully.
+
 ## 1.3.0
 
 **中文**

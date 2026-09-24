@@ -21,7 +21,12 @@ public sealed class NotifyIconTray : IDisposable
     private System.Windows.Forms.NotifyIcon? _icon;
     private System.Windows.Forms.ToolStripMenuItem? _updateItem;
 
-    /// <summary>Show or hide the "Update available" row at the top of the menu.</summary>
+    /// <summary>Show or hide the tray icon at runtime (hide-tray-icon setting).</summary>
+    public void SetVisible(bool visible)
+    {
+        if (_icon is null) return;
+        _icon.Visible = visible;
+    }
     public void SetUpdateAvailable(string? tag)
     {
         if (_icon?.ContextMenuStrip is not { } menu) return;

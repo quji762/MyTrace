@@ -7,7 +7,7 @@
 ## 一句话概括
 
 **Pulse.Win 是 macOS 菜单栏应用 [Pulse](https://github.com/qunqin24/Pulse) 的 Windows 原生重写**：
-悬浮 Rail 条实时显示 19 家 AI 编码工具的额度与用量，配合阈值通知、燃烧率预测、
+悬浮 Rail 条实时显示 20 家 AI 编码工具的额度与用量，配合阈值通知、燃烧率预测、
 多账号管理，以及一个覆盖约 50 个本地数据源的 Token Spend 历史面板。
 
 **它是重写，不是移植**——复用上游的 Provider 协议知识、DTO、归一化算法、
@@ -30,7 +30,7 @@ Pulse.Win/
 ├─ src/
 │  ├─ Pulse.App/            WPF 应用：Rail 悬浮条、托盘、设置、Token Spend 面板、组合根
 │  ├─ Pulse.Core/           领域模型与全部业务逻辑：
-│  │   ├─ Providers/          19 个 Provider 的额度 DTO + 归一化 + PercentNormalization
+│  │   ├─ Providers/          20 个 Provider 的额度 DTO + 归一化 + PercentNormalization
 │  │   ├─ Usage/              last-good 缓存（scope 隔离、24h 上限）
 │  │   ├─ Refresh/            自适应刷新引擎（单调度器、2–30 分钟、异常隔离）
 │  │   ├─ Forecast/           燃烧率预测（reset 前 2 小时内给出 ETA）
@@ -38,7 +38,7 @@ Pulse.Win/
 │  │   ├─ Ledger/             ~50 个 spend 数据源读取器 + UsageLedger 定价管线
 │  │   ├─ ClaudeHook/         status-line hook 安装器 + --statusline 捕获模式
 │  │   └─ Accounts/           多账号 slot 管理
-│  ├─ Pulse.Providers/      19 个 Provider 适配器（每家一个目录）+ 注册表
+│  ├─ Pulse.Providers/      20 个 Provider 适配器（每家一个目录）+ 注册表
 │  ├─ Pulse.Auth/           OAuth/设备码/loopback 登录流程
 │  ├─ Pulse.Diagnostics/    脱敏日志（canary 扫描、Bearer/Cookie 拦截）
 │  └─ Pulse.Storage/        DPAPI CurrentUser vault + Windows Credential Manager
@@ -52,7 +52,7 @@ Pulse.Win/
 
 ### 额度显示（主链路）——已对齐
 
-- **19 个额度 Provider 全部移植**：Claude、Codex、Antigravity、Cursor、OpenCode Go、
+- **20 个额度 Provider 全部移植**：Claude、Codex、Kiro、Antigravity、Cursor、OpenCode Go、
   Kimi、Ollama Cloud、z.ai、Zhipu GLM、MiniMax ×2、Copilot、Grok、Grok Bot、
   Volcengine、Command Code、DeepSeek、Devin、Xiaomi MiMo。
 - Rail UI（贴边/吸附/拖拽/2s 收起/hover 展开/位置持久化）、燃烧率、阈值通知、

@@ -88,6 +88,23 @@ public static class ModelPriceCatalog
             ?? new Dictionary<string, ModelPrice>();
     }
 
+    /// <summary>Force a fresh download, bypassing the cache freshness check.
+    /// Returns the new table on success, or the existing cache on failure.</summary>
+    public static async Task<IReadOnlyDictionary<string, ModelPrice>> RefreshAsync(
+        string? cacheDirectory = null, HttpClient? http = null)
+    {
+        var directory = cacheDirectory ?? DefaultCacheDirectory();
+        var fetched = await DownloadAsync(http ?? SharedClient()).ConfigureAwait(false);
+        if (fetched is { } table && table.Count > 0)
+        {
+            WriteCache(directory, table);
+            return table;
+        }
+        return ReadCache(directory)?.Prices
+            ?? ReadCache(directory, allowPreviousVersion: true)?.Prices
+            ?? new Dictionary<string, ModelPrice>();
+    }
+
     private static HttpClient SharedClient()
     {
         lock (ClientGate)

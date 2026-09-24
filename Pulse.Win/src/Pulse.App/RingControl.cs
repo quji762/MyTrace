@@ -47,9 +47,9 @@ public sealed class RingControl : StackPanel
             Text = "—",
             FontFamily = DesignTokens.UiFont,
             FontSize = DesignTokens.TypePercent,
-            FontWeight = FontWeights.Medium,
+            FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 6, 0, 0),
+            Margin = new Thickness(0, 5, 0, 0),
             Opacity = 0.4,
             Foreground = LabelBrush(),
         };
@@ -180,7 +180,7 @@ public sealed class RingControl : StackPanel
 
             // Track is a hair thinner than the progress stroke so the live arc
             // reads as sitting on top of it.
-            dc.DrawEllipse(null, new Pen(track, Stroke - 1)
+            dc.DrawEllipse(null, new Pen(track, Stroke - 1.5)
             {
                 StartLineCap = PenLineCap.Round,
                 EndLineCap = PenLineCap.Round,
@@ -188,8 +188,8 @@ public sealed class RingControl : StackPanel
 
             if (_arcColor is { } colour && _fraction > 0)
             {
-                var glow = Frozen(Color.FromArgb(0x38, colour.R, colour.G, colour.B));
-                dc.DrawGeometry(null, Pen(glow, Stroke + 3), Arc(center, radius, _fraction));
+                var glow = Frozen(Color.FromArgb(0x30, colour.R, colour.G, colour.B));
+                dc.DrawGeometry(null, Pen(glow, Stroke + 3.5), Arc(center, radius, _fraction));
                 dc.DrawGeometry(null, Pen(Frozen(colour)), Arc(center, radius, _fraction));
             }
 
@@ -197,7 +197,7 @@ public sealed class RingControl : StackPanel
             if (!_hasReading && label is SolidColorBrush solid)
             {
                 var dim = solid.Color;
-                label = new SolidColorBrush(Color.FromArgb(0x66, dim.R, dim.G, dim.B));
+                label = new SolidColorBrush(Color.FromArgb(0x55, dim.R, dim.G, dim.B));
             }
 
             const double icon = 16;

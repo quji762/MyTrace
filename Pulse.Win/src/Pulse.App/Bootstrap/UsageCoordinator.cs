@@ -16,6 +16,7 @@ public sealed class UsageCoordinator : IAsyncDisposable
     public sealed record Reading(MonitoredAccount Account, ProviderReadResult Result);
 
     private readonly Func<IReadOnlyList<MonitoredAccount>> _accounts;
+    private readonly Action<IReadOnlyList<MonitoredAccount>>? _onAccountsResolved;
     private readonly RefreshEngine _engine;
     private readonly System.Threading.Timer _timer;
     private readonly CancellationTokenSource _shutdown = new();
@@ -28,16 +29,19 @@ public sealed class UsageCoordinator : IAsyncDisposable
         IReadOnlyDictionary<ProviderId, IUsageProvider> adapters,
         Func<IReadOnlyList<MonitoredAccount>> accounts,
         Action<Reading> onReading,
-        Func<MonitoredAccount, AdaptiveRefresh.Signals>? signals = null)
+        Func<MonitoredAccount, AdaptiveRefresh.Signals>? signals = null,
+        Action<IReadOnlyList<MonitoredAccount>>? onAccountsResolved = null,
+        ILogger? logger = null)
     {
         _accounts = () => accounts()
             .Where(account => account.Enabled && adapters.ContainsKey(account.Provider))
             .ToArray();
+        _onAccountsResolved = onAccountsResolved;
 
         _engine = new RefreshEngine(
             account => adapters.GetValueOrDefault(account.Provider),
             signals ?? (_ => new AdaptiveRefresh.Signals { PanelVisible = true }),
-            new DebugLogger(),
+            logger ?? new DebugLogger(),
             cacheDirectory: Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "PulseWin", "usage-cache"));
@@ -71,6 +75,8 @@ public sealed class UsageCoordinator : IAsyncDisposable
         try
         {
             var accounts = _accounts();
+            // Let the UI know which accounts are active so it can remove stale rings.
+            _onAccountsResolved?.Invoke(accounts);
             lock (_scheduled)
             {
                 foreach (var account in accounts)

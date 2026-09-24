@@ -14,6 +14,7 @@ using Pulse.Core.Notifications;
 using Pulse.Core.Platform;
 using Pulse.Core.Providers;
 using Pulse.Core.Refresh;
+using Pulse.Diagnostics;
 using Pulse.Storage;
 using Pulse.Providers;
 
@@ -37,6 +38,10 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Install crash logging first — anything after this that throws is captured.
+        Bootstrap.CrashLogger.Install();
+
         // Apply the saved Light/Dark/System palette immediately — PulseStyles
         // ships dark, so without this a Light user stays dark until Settings.
         ThemeManager.Apply(ThemeManager.Current);
@@ -92,11 +97,23 @@ public partial class App : System.Windows.Application
         // The DPAPI vault holds pasted credentials and added-account tokens.
         // Providers see a store that unwraps OAuth bundles and renews them.
         // Settings keeps the raw store so a saved key is what the user typed.
-        ICredentialStore store = DpapiCredentialStore.IsWindowsSupported()
+        ICredentialStore vault = DpapiCredentialStore.IsWindowsSupported()
             ? new DpapiCredentialStore()
             : new InMemoryCredentialStore();
+
+        // Every secret passing through the vault is registered with the shared
+        // log scrubber: a credential must never surface in the crash or
+        // diagnostic log, including tokens a background renewal writes back.
+        ICredentialStore store = new SecretRegisteringStore(vault);
+
         var accounts = new MultiAccountStore(store);
         var adapters = ProviderRegistry.CreateAll(new RefreshingCredentialStore(store));
+
+        // Rolling diagnostic log. RedactingLogger is the single choke point: every
+        // message is scrubbed before the sink (5 MB per file, 7-day retention).
+        var log = new RedactingLogger(
+            new ILogSink[] { new FileLogSink(FileLogSink.DefaultDirectory()) },
+            scrubber: CrashLogger.Scrubber);
 
         var alertLevel = AlertPreferences.Load(AlertPath());
         _alerts = new ThresholdAlerts(AlertPreferences.Thresholds(alertLevel));
@@ -114,7 +131,10 @@ public partial class App : System.Windows.Application
         void OnReading(UsageCoordinator.Reading reading)
         {
             _rail.UpdateProvider(reading.Account, reading.Result);
-            if (reading.Result.Usage is { Windows.Count: > 0 } usage)
+            // Only alert on fresh readings — a cached fallback must not
+            // re-trigger threshold alerts for data the user already saw.
+            if (reading.Result.Health == ProviderReadHealth.Healthy &&
+                reading.Result.Usage is { Windows.Count: > 0 } usage)
             {
                 foreach (var window in usage.Windows)
                     _alerts.Observe(ThresholdAlerts.KeyFor(usage.Provider, usage.AccountId, window.Id), window);
@@ -131,8 +151,11 @@ public partial class App : System.Windows.Application
                 RecentlyHovered = _rail?.HoveredRecently == true,
                 PowerConstrained = IsOnBattery(),
                 LocallyUnobservable = account.Provider is ProviderId.DeepSeek or ProviderId.CommandCode,
-                LastLocalActivity = LocalActivity.LatestTranscriptWrite(),
-            });
+                // Only scan transcripts of providers that are actually enabled.
+                LastLocalActivity = LocalActivity.LatestTranscriptWrite(EnabledTranscriptProviders(accounts, store)),
+            },
+            onAccountsResolved: activeAccounts => _rail?.SyncActiveProviders(activeAccounts),
+            logger: log);
         _rail!.UserHovering += () => _coordinator?.RequestHover();
 
         _tray = new NotifyIconTray();
@@ -161,6 +184,10 @@ public partial class App : System.Windows.Application
         _hotkey = new Pulse.App.Platform.GlobalHotkey();
         _hotkey.Pressed += () => Dispatcher.BeginInvoke(() => _rail?.ToggleVisibility());
         ApplyHotkeyPreference();
+        // Apply the hide-tray preference at startup (after hotkey is ready
+        // so the entry-point invariant has the full picture).
+        if (Pulse.Core.Platform.TrayPreferences.Load())
+            _tray.SetVisible(false);
 
         _deeplinkTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -174,6 +201,7 @@ public partial class App : System.Windows.Application
             Interval = TimeSpan.FromHours(2),
         };
         _updateTimer.Tick += (_, _) => _ = CheckForUpdateAsync();
+        _updateTimer.Start(); // periodic checks every 2h regardless of first result
 
         _coordinator.Start();
         _ = CheckForUpdateAsync();
@@ -199,6 +227,65 @@ public partial class App : System.Windows.Application
         else
         {
             _hotkey.Unregister();
+        }
+
+        // Changing the hotkey may affect the entry-point invariant.
+        EnforceEntryPointInvariant();
+    }
+
+    /// <summary>Called when a provider is disabled in Settings: remove its rings from the rail.</summary>
+    internal void NotifyProviderDisabled(ProviderId provider)
+    {
+        _rail?.RemoveProviderAll(provider);
+    }
+
+    /// <summary>Called when a provider is re-enabled in Settings: clear its denied keys so rings can return.</summary>
+    internal void NotifyProviderEnabled(ProviderId provider)
+    {
+        _rail?.AllowProviderAll(provider);
+    }
+
+    /// <summary>
+    /// Apply the hide-tray-icon preference. Refuses to hide when no other
+    /// entry point (rail or global hotkey) remains — matching upstream's
+    /// "hiding the menu bar icon cannot lock the user out" invariant.
+    /// </summary>
+    internal void ApplyTrayPreference(bool hide)
+    {
+        if (hide)
+        {
+            // At least one entry point must remain: the rail must be visible
+            // or the hotkey must be registered. Otherwise refuse and keep tray.
+            var railVisible = _rail is { IsVisible: true };
+            var hotkeyRegistered = _hotkey?.IsRegistered == true;
+            if (!railVisible && !hotkeyRegistered)
+            {
+                // Refuse: no other entry point. Keep the tray icon.
+                Pulse.Core.Platform.TrayPreferences.Save(false);
+                return;
+            }
+        }
+
+        Pulse.Core.Platform.TrayPreferences.Save(hide);
+        _tray?.SetVisible(!hide);
+        EnforceEntryPointInvariant();
+    }
+
+    /// <summary>
+    /// If the tray is hidden and neither the rail nor the hotkey provides an
+    /// entry point, restore the tray icon. Called after any change that might
+    /// remove the last entry point.
+    /// </summary>
+    private void EnforceEntryPointInvariant()
+    {
+        if (!Pulse.Core.Platform.TrayPreferences.Load()) return; // tray is visible
+        var railVisible = _rail is { IsVisible: true };
+        var hotkeyRegistered = _hotkey?.IsRegistered == true;
+        if (!railVisible && !hotkeyRegistered)
+        {
+            // Last entry point gone: restore the tray icon.
+            Pulse.Core.Platform.TrayPreferences.Save(false);
+            _tray?.SetVisible(true);
         }
     }
 
@@ -328,7 +415,57 @@ public partial class App : System.Windows.Application
         return ProviderEnablement.DueAccounts(AccountsOf(accounts), Enabled);
     }
 
+    /// <summary>
+    /// Providers that keep local transcripts AND are currently enabled.
+    /// Passed to LocalActivity so a disabled provider's transcript tree is not walked.
+    /// </summary>
+    private static IReadOnlySet<ProviderId> EnabledTranscriptProviders(MultiAccountStore accounts, ICredentialStore store)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var overrides = ProviderEnablement.LoadOverrides(EnablementPath());
+        var set = new HashSet<ProviderId>();
+        foreach (var id in Enum.GetValues<ProviderId>())
+        {
+            if (!ProviderCapabilities.For(id).KeepsLocalTranscripts) continue;
+            if (ProviderEnablement.IsEnabled(
+                    id,
+                    overrides,
+                    ProviderPresence.Found(id, home, roaming, FileOrDirectoryExists),
+                    store.GetSecret(id, id.ToString()) is { Length: > 0 }
+                        || accounts.List(id).Count > 0))
+                set.Add(id);
+        }
+
+        return set;
+    }
+
     private static bool FileOrDirectoryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    /// <summary>
+    /// Transparent ICredentialStore wrapper: every secret it sees is registered
+    /// with the shared log scrubber, so no credential value can surface in the
+    /// crash log or the diagnostic file log regardless of who stored or read it.
+    /// </summary>
+    private sealed class SecretRegisteringStore(ICredentialStore inner) : ICredentialStore
+    {
+        public string? GetSecret(ProviderId provider, string accountId)
+        {
+            var secret = inner.GetSecret(provider, accountId);
+            if (!string.IsNullOrEmpty(secret))
+                CrashLogger.RegisterSecret(secret);
+            return secret;
+        }
+
+        public void SetSecret(ProviderId provider, string accountId, string secret)
+        {
+            CrashLogger.RegisterSecret(secret);
+            inner.SetSecret(provider, accountId, secret);
+        }
+
+        public void RemoveSecret(ProviderId provider, string accountId) =>
+            inner.RemoveSecret(provider, accountId);
+    }
 
     /// <summary>Primary account for every provider, plus added slots where the provider allows them.</summary>
     private static IReadOnlyList<MonitoredAccount> AccountsOf(MultiAccountStore accounts)

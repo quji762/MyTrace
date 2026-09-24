@@ -1,6 +1,6 @@
 namespace Pulse.Core.Providers;
 
-/// <summary>Human names for the nineteen quota providers. The rail and settings read only this.</summary>
+/// <summary>Human names for the twenty-four quota providers. The rail and settings read only this.</summary>
 public static class ProviderCatalog
 {
     public static string DisplayName(ProviderId id) => id switch
@@ -24,6 +24,11 @@ public static class ProviderCatalog
         ProviderId.DeepSeek => "DeepSeek",
         ProviderId.Devin => "Devin",
         ProviderId.XiaomiMiMo => "Xiaomi Coding Plan",
+        ProviderId.Kiro => "Kiro",
+        ProviderId.Qoder => "Qoder",
+        ProviderId.Sub2API => "Sub2API",
+        ProviderId.NewAPI => "New API",
+        ProviderId.V2EX => "V2EX",
         _ => id.ToString(),
     };
 

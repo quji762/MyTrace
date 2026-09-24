@@ -11,12 +11,24 @@
         Topmost="True"
         ShowActivated="False"
         UseLayoutRounding="True"
-        TextOptions.TextFormattingMode="Display">
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType">
     <Border x:Name="Shell"
             Background="{DynamicResource RailBackground}"
-            CornerRadius="26"
+            CornerRadius="28"
             Padding="10,22"
             SnapsToDevicePixels="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="32" ShadowDepth="0" Opacity="0.5" Color="#000000" />
+        </Border.Effect>
+        <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#28FFFFFF" Offset="0" />
+                <GradientStop Color="#10FFFFFF" Offset="0.5" />
+                <GradientStop Color="#18FFFFFF" Offset="1" />
+            </LinearGradientBrush>
+        </Border.BorderBrush>
+        <Border.BorderThickness>1</Border.BorderThickness>
         <Grid>
             <TextBlock x:Name="EmptyMark"
                        Text="Pulse"

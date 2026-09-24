@@ -33,6 +33,11 @@ public sealed record ProviderCapabilities
         ProviderId.OpenCodeGo => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
         ProviderId.OllamaCloud => new() { UsesApiKey = false, UsesSessionCookie = true, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
         ProviderId.XiaomiMiMo => new() { UsesApiKey = false, UsesSessionCookie = true, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
+        ProviderId.Kiro => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
+        ProviderId.Qoder => new() { UsesApiKey = false, UsesSessionCookie = true, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
+        ProviderId.Sub2API => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = true, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
+        ProviderId.NewAPI => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = true, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
+        ProviderId.V2EX => new() { UsesApiKey = true, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
         _ => new() { UsesApiKey = false, UsesSessionCookie = false, ReportsSpendableBalance = false, SupportsMultipleAccounts = false, KeepsLocalTranscripts = false },
     };
 }

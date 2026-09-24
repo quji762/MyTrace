@@ -34,7 +34,8 @@ public static class ProviderEnablement
 
     public static void SaveOverrides(string path, IReadOnlyDictionary<ProviderId, bool> overrides)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var raw = overrides.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value);
         File.WriteAllText(path, JsonSerializer.Serialize(raw));
     }

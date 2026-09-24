@@ -1,7 +1,7 @@
 namespace Pulse.Core.Providers;
 
 /// <summary>
-/// The 19 quota providers defined by upstream Pulse (qunqin24/Pulse).
+/// The 24 quota providers defined by upstream Pulse (qunqin24/Pulse).
 /// Numeric values are stable serialization ids; never renumber.
 /// </summary>
 public enum ProviderId
@@ -25,6 +25,11 @@ public enum ProviderId
     DeepSeek = 16,
     Devin = 17,
     XiaomiMiMo = 18,
+    Kiro = 19,
+    Qoder = 20,
+    Sub2API = 21,
+    NewAPI = 22,
+    V2EX = 23,
 }
 
 /// <summary>
@@ -36,6 +41,7 @@ public enum UsageRoute
     StatusLine,
     DesktopSession,
     AppServer,
+    KiroAcp,
     LanguageServer,
     WebSession,
     ArkCLI,

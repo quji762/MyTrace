@@ -62,6 +62,7 @@ public sealed class RedactingLogger : Pulse.Core.Refresh.ILogger
 public sealed partial class SecretScrubber
 {
     private readonly HashSet<string> _literalSecrets = new(StringComparer.Ordinal);
+    private readonly object _secretLock = new();
 
     [GeneratedRegex(@"(?i)authorization\s*[:=]\s*\S.*")]
     private static partial Regex AuthorizationPattern();
@@ -77,16 +78,21 @@ public sealed partial class SecretScrubber
 
     public void RegisterSecret(string secret)
     {
-        if (!string.IsNullOrWhiteSpace(secret))
-            _literalSecrets.Add(secret);
+        if (string.IsNullOrWhiteSpace(secret)) return;
+        lock (_secretLock) _literalSecrets.Add(secret);
     }
 
     public string Scrub(string message)
     {
         if (string.IsNullOrEmpty(message)) return message;
 
+        // Snapshot under the lock: registrations can arrive from the UI thread
+        // while a background refresh is scrubbing.
+        string[] literals;
+        lock (_secretLock) literals = _literalSecrets.ToArray();
+
         var sb = new StringBuilder(message);
-        foreach (var secret in _literalSecrets)
+        foreach (var secret in literals)
         {
             sb.Replace(secret, "[REDACTED]");
         }

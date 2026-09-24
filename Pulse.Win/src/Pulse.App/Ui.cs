@@ -118,6 +118,8 @@ public static class Ui
     public static string GlobalHotkey => Zh
         ? "全局快捷键 Ctrl+Alt+P 显示/隐藏工具条"
         : "Global hotkey Ctrl+Alt+P toggles the rail";
+
+    public static string HideTrayIcon => Zh ? "隐藏系统托盘图标" : "Hide the system tray icon";
     public static string SignInCopilot => Zh ? "登录 GitHub Copilot" : "Sign in to GitHub Copilot";
     public static string LanguageLabel => Zh ? "界面语言" : "Language";
     public static string ThemeLabel => Zh ? "外观" : "Theme";

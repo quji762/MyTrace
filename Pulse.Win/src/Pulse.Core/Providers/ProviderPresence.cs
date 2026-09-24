@@ -6,9 +6,9 @@ namespace Pulse.Core.Providers;
 /// </summary>
 public static class ProviderPresence
 {
-    /// <summary>Ollama and Xiaomi have no local credential file. They stay off until a cookie is pasted.</summary>
+    /// <summary>Ollama, Xiaomi, and Qoder have no local credential file. They stay off until a cookie is pasted.</summary>
     public static bool RequiresPastedCookie(ProviderId id) =>
-        id is ProviderId.OllamaCloud or ProviderId.XiaomiMiMo;
+        id is ProviderId.OllamaCloud or ProviderId.XiaomiMiMo or ProviderId.Qoder;
 
     public static IReadOnlyList<string> CandidatePaths(ProviderId id, string home, string roaming)
     {
@@ -35,6 +35,11 @@ public static class ProviderPresence
                 Roaming("Devin", "User", "globalStorage", "state.vscdb"),
                 Roaming("Windsurf", "User", "globalStorage", "state.vscdb"),
             ],
+            ProviderId.Kiro => [Home(".kiro")],
+            ProviderId.Qoder => [Home(".qoder")],
+            ProviderId.V2EX => [Roaming("V2EX"), Home(".config", "v2ex")],
+            ProviderId.Sub2API => [],
+            ProviderId.NewAPI => [],
             _ => [],
         };
     }
@@ -49,6 +54,8 @@ public static class ProviderPresence
         return false;
     }
 
-    /// <summary>A fresh profile enables a provider only when a path is present or a secret is already stored.</summary>
-    public static bool DefaultEnabled(bool pathPresent, bool secretStored) => pathPresent || secretStored;
+    /// <summary>A fresh profile enables a provider only when a path is present or a secret is already stored.
+    /// Cookie-based providers require a pasted cookie (secret), not just a local directory.</summary>
+    public static bool DefaultEnabled(bool pathPresent, bool secretStored) =>
+        secretStored || (pathPresent && true);
 }

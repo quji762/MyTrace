@@ -12,7 +12,7 @@
 
 | 能力 | 状态 |
 |---|---|
-| 19 个额度 Provider 的读取/解析层 | 全部移植（Claude、Codex、Antigravity、Cursor、OpenCode Go、Kimi、Ollama Cloud、z.ai、Zhipu GLM、MiniMax ×2、Copilot、Grok、Grok Bot、Volcengine、Command Code、DeepSeek、Devin、Xiaomi MiMo），上游语义铁律逐条锁定并有契约测试 |
+| 20 个额度 Provider 的读取/解析层 | 全部移植（Claude、Codex、Kiro、Antigravity、Cursor、OpenCode Go、Kimi、Ollama Cloud、z.ai、Zhipu GLM、MiniMax ×2、Copilot、Grok、Grok Bot、Volcengine、Command Code、DeepSeek、Devin、Xiaomi MiMo），上游语义铁律逐条锁定并有契约测试 |
 | 上游语义铁律 | 不发明百分比；exhausted 只来自 Provider 标志；剩余→已用只反转一次；windowSeconds 可能只是排序键；缺失金额≠0；Grok 缺失=0 与 GrokBot 缺失=unset 的相反规则 |
 | last-good 缓存 | scope 严格隔离；reset 已过窗口直接丢弃；无 reset 窗口 24h 上限；缓存读数永远标 stale |
 | 自适应刷新 | 单调度器 + 账户级 due time；2–30 分钟区间；余额类 Provider 5 分钟上限；进行中刷新合并；单 Provider 异常隔离 |
@@ -22,7 +22,7 @@
 | OAuth/设备码 | Copilot GitHub Device Flow（`read:user` 仅限）；Claude loopback（任意端口，`user:profile` 仅限，exchange 带 state）；OpenAI Device Code（非 RFC 8628：403/404=等待，provider 生成 proof key，不带 state）；PKCE（challenge=SHA-256 of ENCODED verifier） |
 | 浏览器会话 Provider | Ollama Cloud + Xiaomi MiMo：仅用户主动粘贴 Cookie（allow-list 过滤 + 注入防护）；**绝不自动解密 Chrome Cookie**（App-Bound Encryption 是安全边界） |
 | Antigravity | 本地 language_server 进程/端口/CSRF 发现（app 优先于 IDE）；remainingFraction 反转一次；所有候选全部尝试 |
-| Rail UI | 无边框置顶悬浮条；左/右贴边 + 吸附；拖拽；位置按显示器+归一化偏移持久化（非绝对像素）；自动收起（2s 后收起、hover 展开）；19 环滚动布局；plan/reset/余额说明文字 |
+| Rail UI | 无边框置顶悬浮条；左/右贴边 + 吸附；拖拽；位置按显示器+归一化偏移持久化（非绝对像素）；自动收起（2s 后收起、hover 展开）；20 环滚动布局；plan/reset/余额说明文字 |
 | 燃烧率预测 | 单读数 rate = spent share/elapsed share；仅在 reset 前 2 小时内给出；burn ≤ 1 无 wall |
 | 阈值通知 | crossing 触发一次（armed/disarmed 迟滞）；reset 变更重新武装；Provider exhausted 标志无视百分比；气泡通知 + Rail 双通道 |
 | Windows 集成 | 托盘图标（Explorer 重启自恢复）；命名互斥体单实例；HKCU Run 键开机启动（无需管理员）；设置窗口 |
@@ -49,6 +49,7 @@
 | Copilot Desktop spend 源 | data.db 行是 LIFETIME 权威、sidecar events.jsonl 是运行中总量：shutdown 快照按模型差分、按行预算封顶，解释不了的余量在 created_at 一次性发出；无 session.start 时首快照是未知基线；cache_write 只在 sidecar；reasoning 不并入 output（归属未声明）→标 isPartial；本车道全部 isAggregate |
 | Copilot VS Code spend 源 | chatSessions JSONL 是 append/patch 日志（kind 0/1/2），先重建请求数组再读取；仅 Copilot 自家请求计数（resolvedModel 或 copilot/ 前缀）；thinking tokens 折入 output；无时间戳跳过（不落 epoch）；同时刻两请求带 #n 后缀都计数 |
 | Kiro spend 源 | ~/.kiro/sessions/cli 的 header+sidecar 对：只读真实计数器（input/output_token_count），全零的轮次不发出——零不是测量值；Prompt sidecar 时间优先于 end_timestamp；上下文窗口/字符数估算路线刻意不读 |
+| Kiro 额度 Provider | `kiro-cli acp` ACP 协议读取订阅额度；资源类型作窗口身份（数组重排不丢 pin）；Kiro 自管认证，Pulse 不读其凭据 |
 | Qwen spend 源 | Gemini 形 usageMetadata：totalTokenCount 用作**校验**——证明 cache 在 prompt 内（相减）或并列（disjoint），两种恒等式都不成立时整个 total 记 unclassified 而非猜测拆分；thoughts 计入 output；片段内容摘要 + 位置做身份 |
 | Gemini CLI spend 源 | 三种盘上形状（session-*.json / tmp/<id>/chats/*.json / headless JSONL）各自解析；缓存关系**按形状区分**：session 形靠 total 恒等式证明、headless 形按输入键名（prompt 风格=含缓存、裸 input=净值）+tokens 包装判断；tool tokens 是真实计数（session 形折入 input）；reasoning 叠加在 output 上；headless 同 id 重导出**原位替换**不重复计数 |
 | Crush spend 源（识别但无 token） | projects.json 注册表与各项目 crush.db 被定位和监视，但**不产生任何记录**：Crush 只报会话 cost（美元），把 cost 反推成 token 数就是编造没人测量过的数字——上游同一裁定，面板如实显示"无 token 计数"而非静默缺席 |
@@ -120,7 +121,7 @@ Pulse.Win/
 ├─ src/
 │  ├─ Pulse.App/            WPF 应用（Rail 窗口、托盘、设置、组合根）
 │  ├─ Pulse.Core/           领域模型：UsageWindow/ProviderUsage、缓存、刷新引擎、预测、告警
-│  ├─ Pulse.Providers/      19 个 Provider 适配器 + 注册表
+│  ├─ Pulse.Providers/      20 个 Provider 适配器 + 注册表
 │  ├─ Pulse.Auth/           OAuth/设备码/loopback 登录流程
 │  ├─ Pulse.Diagnostics/    脱敏日志（canary 扫描、Bearer/Cookie/Authorization 拦截）
 │  └─ Pulse.Storage/        DPAPI 凭据库 + Credential Manager

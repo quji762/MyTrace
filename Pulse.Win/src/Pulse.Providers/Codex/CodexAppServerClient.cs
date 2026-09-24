@@ -23,9 +23,18 @@ public sealed class CodexAppServerClient : IAsyncDisposable
     private StreamWriter? _stdin;
     private StreamReader? _stdout;
     private int _nextId = 1;
-    private readonly Dictionary<int, TaskCompletionSource<JsonElement?>> _pending = new();
+    // Each pending request owns its timeout CTS: cancelled when the request
+    // finishes, so a stale timer can never complete a newer request that
+    // reused the same identifier after a helper restart (upstream d35cb00).
+    private readonly Dictionary<int, PendingRequest> _pending = new();
     private readonly StringBuilder _lineBuffer = new();
     private Action? _onRateLimitsChanged;
+
+    private sealed class PendingRequest(TaskCompletionSource<JsonElement?> completion, CancellationTokenSource timeoutCts)
+    {
+        public TaskCompletionSource<JsonElement?> Completion { get; } = completion;
+        public CancellationTokenSource TimeoutCts { get; } = timeoutCts;
+    }
 
     public enum FailureKind
     {
@@ -137,7 +146,8 @@ public sealed class CodexAppServerClient : IAsyncDisposable
         _stdin = process.StandardInput;
         _stdout = process.StandardOutput;
         FailAllPending();
-        _nextId = 1;
+        // Do NOT reset _nextId: IDs belong to the client, not the child process.
+        // A timeout already queued must never find a new request under its old ID.
 
         // Drain stderr so a chatty child cannot fill the pipe and block.
         var stderr = process.StandardError;
@@ -239,14 +249,18 @@ public sealed class CodexAppServerClient : IAsyncDisposable
 
     private void FailAllPending()
     {
-        List<TaskCompletionSource<JsonElement?>> pending;
+        List<PendingRequest> pending;
         lock (_lock)
         {
             pending = _pending.Values.ToList();
             _pending.Clear();
         }
-        foreach (var tcs in pending)
-            tcs.TrySetException(new AppServerException(FailureKind.StartFailed));
+        foreach (var request in pending)
+        {
+            request.TimeoutCts.Cancel();
+            request.TimeoutCts.Dispose();
+            request.Completion.TrySetException(new AppServerException(FailureKind.StartFailed));
+        }
     }
 
 
@@ -269,14 +283,29 @@ public sealed class CodexAppServerClient : IAsyncDisposable
     private async Task<JsonElement?> SendCoreAsync(string method, Dictionary<string, object> parameters, CancellationToken cancellationToken)
     {
         int id;
+        TaskCompletionSource<JsonElement?> completion;
+        CancellationTokenSource timeoutCts;
         lock (_lock)
         {
             if (_stdin is null) throw new AppServerException(FailureKind.StartFailed);
             id = _nextId++;
+            completion = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            timeoutCts = new CancellationTokenSource();
+            _pending[id] = new PendingRequest(completion, timeoutCts);
         }
 
-        var completion = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        lock (_lock) _pending[id] = completion;
+        // Each pending request owns its 20-second timeout, cancelled when the
+        // request finishes or the connection closes. Old timeout callbacks and
+        // queued data from a closed pipe cannot affect the next helper.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(20), timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { return; }
+            FinishRequest(id, new AppServerException(FailureKind.TimedOut));
+        }, CancellationToken.None);
 
         var message = JsonSerializer.Serialize(new Dictionary<string, object>
         {
@@ -297,32 +326,50 @@ public sealed class CodexAppServerClient : IAsyncDisposable
         }
         catch (Exception)
         {
-            lock (_lock) _pending.Remove(id);
+            FinishRequest(id, new AppServerException(FailureKind.StartFailed));
             // The helper is gone; the next call starts a fresh one.
             lock (_lock)
             {
                 if (_process is { } dying)
-            {
-                try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
-                dying.Dispose();
-            }
-            _process = null;
+                {
+                    try { if (!dying.HasExited) dying.Kill(entireProcessTree: true); } catch (Exception) { }
+                    dying.Dispose();
+                }
+                _process = null;
                 _stdin = null;
                 _stdout = null;
             }
             throw new AppServerException(FailureKind.StartFailed);
         }
 
-        var timeout = Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
-        var finished = await Task.WhenAny(completion.Task, timeout).ConfigureAwait(false);
-        if (cancellationToken.IsCancellationRequested)
-            throw new OperationCanceledException(cancellationToken);
-        if (finished != completion.Task)
-        {
-            lock (_lock) _pending.Remove(id);
-            throw new AppServerException(FailureKind.TimedOut);
-        }
+        using var registration = cancellationToken.Register(() =>
+            FinishRequest(id, new AppServerException(FailureKind.StartFailed, "cancelled")));
         return await completion.Task.ConfigureAwait(false);
+    }
+
+    /// <summary>Complete a pending request and cancel its timeout. Idempotent.</summary>
+    private void FinishRequest(int id, Exception exception)
+    {
+        PendingRequest? request;
+        lock (_lock)
+        {
+            if (!_pending.Remove(id, out request)) return;
+        }
+        request.TimeoutCts.Cancel();
+        request.TimeoutCts.Dispose();
+        request.Completion.TrySetException(exception);
+    }
+
+    private void FinishRequest(int id, JsonElement? result)
+    {
+        PendingRequest? request;
+        lock (_lock)
+        {
+            if (!_pending.Remove(id, out request)) return;
+        }
+        request.TimeoutCts.Cancel();
+        request.TimeoutCts.Dispose();
+        request.Completion.TrySetResult(result);
     }
 
     private void Notify(string method)
@@ -386,8 +433,17 @@ public sealed class CodexAppServerClient : IAsyncDisposable
                 }
 
                 TaskCompletionSource<JsonElement?>? continuation;
-                lock (_lock) _pending.Remove(id, out continuation);
+                PendingRequest? request;
+                lock (_lock)
+                {
+                    _pending.Remove(id, out request);
+                    continuation = request?.Completion;
+                }
                 if (continuation is null) return;
+
+                // Cancel the timeout: the request has its answer.
+                request!.TimeoutCts.Cancel();
+                request.TimeoutCts.Dispose();
 
                 if (errorText is not null)
                     continuation.TrySetException(new AppServerException(FailureKind.Server, errorText));

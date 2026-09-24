@@ -20,6 +20,7 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
     private readonly Border _shell;
     public event Action? PointerEntered;
     public event Action? PointerLeft;
+    private string? _lastCacheKey;
 
     public HoverDetailCard()
     {
@@ -28,17 +29,18 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
         Placement = System.Windows.Controls.Primitives.PlacementMode.Left;
         _shell = new Border
         {
-            Width = 250,
-            CornerRadius = new CornerRadius(20),
-            Padding = new Thickness(18),
-            Background = Brush("RailBackground", Color.FromRgb(0x14, 0x14, 0x14)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)),
+            Width = 260,
+            CornerRadius = new CornerRadius(18),
+            Padding = new Thickness(20, 16, 20, 18),
+            Background = Brush("CardBackground", Color.FromRgb(0x18, 0x18, 0x1C)),
+            BorderBrush = Brush("CardBorder", Color.FromRgb(0x2A, 0x2A, 0x30)),
             BorderThickness = new Thickness(1),
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
-                BlurRadius = 24,
-                Opacity = 0.45,
-                ShadowDepth = 0,
+                BlurRadius = 36,
+                Opacity = 0.55,
+                ShadowDepth = 2,
+                Color = Color.FromRgb(0, 0, 0),
             },
         };
         _shell.MouseEnter += (_, _) => PointerEntered?.Invoke();
@@ -53,21 +55,21 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
             ? System.Windows.Controls.Primitives.PlacementMode.Left
             : System.Windows.Controls.Primitives.PlacementMode.Right;
         HorizontalOffset = openToTheLeft ? -8 : 8;
-        _shell.Child = Build(usage, title);
+
+        // Rebuild only when the data changed — avoids recreating the visual tree
+        // on every hover, which was the main source of perceived lag.
+        var cacheKey = $"{usage.Provider}:{usage.AccountId}:{usage.ObservedAt}:{usage.State}:{usage.Windows.Count}:{title}";
+        if (cacheKey != _lastCacheKey || _shell.Child is null)
+        {
+            _shell.Child = Build(usage, title);
+            _lastCacheKey = cacheKey;
+        }
         if (!placementTarget.IsVisible) return;
         try
         {
-            _shell.Opacity = 0;
+            // Show immediately at full opacity — a fade-in felt like lag on hover.
+            _shell.Opacity = 1;
             IsOpen = true;
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(
-                1, TimeSpan.FromMilliseconds(DesignTokens.MotionQuick))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase
-                {
-                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut,
-                },
-            };
-            _shell.BeginAnimation(OpacityProperty, fade);
         }
         catch (InvalidOperationException) { }
     }
@@ -82,16 +84,16 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
         header.Children.Add(new GlyphView
         {
             Provider = usage.Provider,
-            Width = 16,
-            Height = 16,
+            Width = 18,
+            Height = 18,
             VerticalAlignment = System.Windows.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
+            Margin = new Thickness(0, 0, 10, 0),
         });
         header.Children.Add(new TextBlock
         {
             Text = title is { Length: > 0 } ? Ui.UsageTitle(title) : Ui.UsageTitle(ProviderCatalog.DisplayName(usage.Provider)),
             FontFamily = Face,
-            FontSize = DesignTokens.TypeTitle,
+            FontSize = 14,
             FontWeight = FontWeights.SemiBold,
             Foreground = Brush("RailForeground", Colors.White),
             VerticalAlignment = System.Windows.VerticalAlignment.Center,
@@ -101,8 +103,8 @@ public sealed class HoverDetailCard : System.Windows.Controls.Primitives.Popup
         stack.Children.Add(new Border
         {
             Height = 1,
-            Margin = new Thickness(0, 12, 0, 0),
-            Background = Brush("Divider", Color.FromArgb(0x1E, 0xFF, 0xFF, 0xFF)),
+            Margin = new Thickness(0, 14, 0, 4),
+            Background = Brush("Divider", Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)),
         });
 
         if (usage.Windows.Count == 0)
@@ -247,14 +249,16 @@ public sealed class UsageMeter : Border
     public UsageMeter(double fraction, Brush accent)
     {
         FillFraction = Math.Clamp(fraction, 0, 1);
-        Height = 6;
-        Margin = new Thickness(0, 7, 0, 7);
+        Height = 5;
+        Margin = new Thickness(0, 8, 0, 8);
         CornerRadius = new CornerRadius(3);
-        Background = new SolidColorBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
+        var track = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+        track.Freeze();
+        Background = track;
         ClipToBounds = true;
         var fill = new Border
         {
-            Height = 6,
+            Height = 5,
             CornerRadius = new CornerRadius(3),
             Background = accent,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Left,

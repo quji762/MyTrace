@@ -18,6 +18,9 @@ public sealed class GlobalHotkey : IDisposable
     private IntPtr _hwnd;
     private bool _registered;
 
+    /// <summary>Whether the hotkey is currently registered with the window server.</summary>
+    public bool IsRegistered => _registered;
+
     public event Action? Pressed;
 
     public static (uint Modifiers, uint VirtualKey) DefaultBinding =>

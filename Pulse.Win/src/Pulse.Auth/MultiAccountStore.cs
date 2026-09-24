@@ -140,9 +140,15 @@ public sealed class MultiAccountStore
                 var json = File.ReadAllText(_indexPath);
                 var raw = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<StoredAccount>>>(json);
                 if (raw is not null)
-                    return raw.ToDictionary(kv => Enum.TryParse<ProviderId>(kv.Key, out var id) ? id : (ProviderId)(-1), kv => kv.Value)
-                        .Where(kv => kv.Key != (ProviderId)(-1))
-                        .ToDictionary(kv => kv.Key, kv => kv.Value);
+                {
+                    var result = new Dictionary<ProviderId, List<StoredAccount>>();
+                    foreach (var kv in raw)
+                    {
+                        if (Enum.TryParse<ProviderId>(kv.Key, out var id))
+                            result[id] = kv.Value;
+                    }
+                    return result;
+                }
             }
         }
         catch (Exception) { }
@@ -153,7 +159,6 @@ public sealed class MultiAccountStore
     {
         try
         {
-            Pulse.Core.Platform.SecureState.EnsureStateDirectory();
             Pulse.Core.Platform.SecureState.EnsureStateDirectory();
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_indexPath)!);
             Pulse.Core.Platform.SecureState.Protect(_indexPath);

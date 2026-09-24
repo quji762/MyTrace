@@ -24,16 +24,16 @@ public static class DesignTokens
     public const double RadiusPill = 999;
 
     // --- type ---
-    public const double TypeCaption = 11;
+    public const double TypeCaption = 11.5;
     public const double TypeBody = 13;
     public const double TypeBodyStrong = 13;
     public const double TypeTitle = 14;
-    public const double TypeSection = 16;
+    public const double TypeSection = 15;
     public const double TypePercent = 12;
     public const double TypePercentAlert = 12;
 
     public static System.Windows.Media.FontFamily UiFont { get; } =
-        new("Segoe UI, Segoe UI Variable, Microsoft YaHei UI, sans-serif");
+        new("Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI, sans-serif");
 
     // --- ring ---
     public const double RingItemHeight = 56;
