@@ -21,7 +21,6 @@ namespace Pulse.App;
 public partial class RailWindow : Window
 {
     private const double RailWidth = 64;
-    private const double CollapsedWidth = 10;
 
     private readonly Dictionary<string, RingControl> _rings = new();
     private readonly Dictionary<string, ProviderUsage> _latest = new();
@@ -32,7 +31,7 @@ public partial class RailWindow : Window
     /// logins must not overwrite each other.</summary>
     private static string Key(MonitoredAccount account) => $"{account.Provider}:{account.AccountId}";
 
-    private static string TitleOf(MonitoredAccount account)
+    internal static string TitleOf(MonitoredAccount account)
     {
         var name = ProviderCatalog.DisplayName(account.Provider);
         // Primary is just the provider; an added account carries the user's label.
@@ -46,10 +45,8 @@ public partial class RailWindow : Window
 
     private readonly HoverDetailCard _hoverCard = new();
     private readonly RailPreferences _preferences;
-    private readonly DispatcherTimer _collapseTimer;
     private System.Windows.Point _dragOffset;
     private bool _dragging;
-    private bool _collapsed;
     private double _expandedWidth = RailWidth;
     private double _expandedHeight = 88;
     private DateTimeOffset _lastHoverUtc = DateTimeOffset.MinValue;
@@ -61,7 +58,8 @@ public partial class RailWindow : Window
     public event Action? OpenTokenSpendRequested;
     public event Action? ExitRequested;
 
-    public bool IsExpanded => !_collapsed;
+    /// <summary>Kept for the refresh scheduler's PanelVisible signal; the rail never folds.</summary>
+    public bool IsExpanded => true;
 
     /// <summary>True for a short while after the pointer enters. The scheduler treats that as a request for fresh numbers.</summary>
     public bool HoveredRecently => DateTimeOffset.UtcNow - _lastHoverUtc < TimeSpan.FromMinutes(2);
@@ -86,14 +84,11 @@ public partial class RailWindow : Window
         {
             _lastHoverUtc = DateTimeOffset.UtcNow;
             UserHovering?.Invoke();
-            Expand();
         };
-        MouseLeave += (_, _) => ScheduleCollapse();
 
         Loaded += (_, _) =>
         {
             RestorePosition();
-            ApplyAutoCollapse();
             // DPI often settles after the first layout. Dock again once it has,
             // or a 96-DPI placement gets scaled off the monitor.
             Dispatcher.BeginInvoke(RestorePosition, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
@@ -109,14 +104,6 @@ public partial class RailWindow : Window
             SystemParameters.StaticPropertyChanged -= HandleDisplayPropertyChanged;
         };
 
-        _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _collapseTimer.Tick += (_, _) =>
-        {
-            _collapseTimer.Stop();
-            Collapse();
-        };
-        _hoverCard.PointerEntered += () => _collapseTimer.Stop();
-        _hoverCard.PointerLeft += ScheduleCollapse;
 
         // Close the hover card shortly after the pointer leaves a ring, with a
         // grace period so the pointer can travel into the card without flicker.
@@ -150,17 +137,13 @@ public partial class RailWindow : Window
     {
         Show();
         WindowState = WindowState.Normal;
-        Expand();
         Activate();
     }
 
-    /// <summary>Global-hotkey toggle: expand when folded, collapse when open.</summary>
+    /// <summary>Global-hotkey/deeplink: bring the rail up and activate it.</summary>
     public void ToggleVisibility()
     {
-        if (!IsVisible || _collapsed)
-            ShowAndRestore();
-        else
-            Collapse();
+        ShowAndRestore();
     }
 
     /// <summary>Deeplink target: bring the rail up and scroll the account's ring into view.</summary>
@@ -190,7 +173,6 @@ public partial class RailWindow : Window
         }
 
         var key = Key(account);
-        var title = TitleOf(account);
 
         if (!_rings.TryGetValue(key, out var ring))
         {
@@ -206,7 +188,6 @@ public partial class RailWindow : Window
                     _hoverCard.ShowFor(u, ring, _preferences.DockedEdge != "left", TitleOf(account));
             };
             ring.MouseLeave += (_, _) => _hoverCloseTimer.Start();
-            ring.ToolTip = title;
             _rings[key] = ring;
             RingHost.Children.Add(ring);
             Fit();
@@ -217,7 +198,6 @@ public partial class RailWindow : Window
             _latest[key] = usage;
             var main = usage.Windows[0];
             ring.SetProgress(main.UsedFraction, main.IsExhausted);
-            ring.ToolTip = title;
         }
         else if (result.Health == ProviderReadHealth.Healthy
                  && result.Usage is { State: UsageState.Unavailable, Unavailability: { Kind: UnavailabilityKind.NoCredits } } emptied)
@@ -228,7 +208,6 @@ public partial class RailWindow : Window
             // (upstream v1.4.1).
             _latest[key] = emptied;
             ring.SetStale();
-            ring.ToolTip = $"{title}\n{Ui.NoCredits}";
         }
         else if (ring.HasFigure)
         {
@@ -238,17 +217,6 @@ public partial class RailWindow : Window
         else
         {
             ring.SetStale();
-            var health = result.Health == ProviderReadHealth.Healthy
-                ? null
-                : result.Health switch
-                {
-                    ProviderReadHealth.Unauthorized => Ui.CredentialRefused,
-                    ProviderReadHealth.CredentialExpired => Ui.NotConfigured,
-                    ProviderReadHealth.RateLimited => Ui.RateLimited,
-                    ProviderReadHealth.SchemaChanged => Ui.RouteChanged,
-                    _ => Ui.Unavailable,
-                };
-            ring.ToolTip = health is null ? title : $"{title}\n{health}";
         }
     }
 
@@ -395,7 +363,6 @@ public partial class RailWindow : Window
 
     private void ShowHover(string key, string title, UIElement target)
     {
-        if (_collapsed) return;
         if (_latest.TryGetValue(key, out var usage))
             _hoverCard.ShowFor(usage, target, _preferences.DockedEdge != "left", title);
     }
@@ -408,7 +375,7 @@ public partial class RailWindow : Window
         // hand-dragged mid-screen rail comes back mid-screen. The docked edge
         // only steers which side the hover card opens on.
         var area = AreaFor(_preferences.MonitorDeviceName);
-        var width = _collapsed ? CollapsedWidth : _expandedWidth;
+        var width = _expandedWidth;
         var height = _expandedHeight;
         Left = area.Left + _preferences.NormalizedX * Math.Max(area.Width - width, 1);
         Top = area.Top + _preferences.NormalizedY * Math.Max(area.Height - height, 1);
@@ -437,64 +404,6 @@ public partial class RailWindow : Window
 
     // --- Auto-collapse ------------------------------------------------------------
 
-    private void ApplyAutoCollapse()
-    {
-        // Leave the rings up. Folding them into a few pixels made the numbers
-        // vanish, and the sliver was too thin to hover back open.
-        _collapseTimer.Stop();
-        _collapsed = false;
-    }
-
-    private void ScheduleCollapse()
-    {
-        _collapseTimer.Stop();
-        _collapseTimer.Interval = TimeSpan.FromSeconds(2);
-        _collapseTimer.Start();
-    }
-
-    private void Collapse()
-    {
-        if (_collapsed) return;
-        _collapsed = true;
-        _hoverCard.IsOpen = false;
-        _hoverCloseTimer.Stop();
-        RingScroll.Visibility = Visibility.Collapsed;
-        EmptyMark.Visibility = Visibility.Collapsed;
-        var area = AreaFor(_preferences.MonitorDeviceName);
-        // Free placement: the capsule shrinks where it stands, clamped inside.
-        Left = Math.Clamp(Left, area.Left, Math.Max(area.Right - CollapsedWidth, area.Left));
-        AnimateWidth(CollapsedWidth);
-    }
-
-    private void Expand()
-    {
-        _collapseTimer.Stop();
-        if (!_collapsed) return;
-        _collapsed = false;
-        EmptyMark.Visibility = _rings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RingScroll.Visibility = _rings.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        var area = AreaFor(_preferences.MonitorDeviceName);
-        // Free placement: it re-expands where it stands, clamped inside.
-        Left = Math.Clamp(Left, area.Left, Math.Max(area.Right - RailWidth, area.Left));
-        AnimateWidth(RailWidth);
-    }
-
-    private void AnimateWidth(double target)
-    {
-        var animation = new System.Windows.Media.Animation.DoubleAnimation(
-            target,
-            TimeSpan.FromMilliseconds(DesignTokens.MotionBase))
-        {
-            EasingFunction = new System.Windows.Media.Animation.CubicEase
-            {
-                EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut,
-            },
-            FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop,
-        };
-        animation.Completed += (_, _) => Width = target;
-        BeginAnimation(WidthProperty, animation);
-    }
-
     // --- Dragging with edge snapping ---------------------------------------------
 
     private void OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -505,10 +414,8 @@ public partial class RailWindow : Window
         if (WithinRing(e.OriginalSource as System.Windows.DependencyObject)) return;
 
         // The drag must own the pointer: the hover card is a separate HWND
-        // that would otherwise take the press, and the collapse timer must
-        // not fold the shell mid-drag if the pointer slips off it.
+        // that would otherwise take the press.
         _hoverCard.IsOpen = false;
-        _collapseTimer.Stop();
         _dragging = true;
         _dragOffset = e.GetPosition(this);
         CaptureMouse();
@@ -550,9 +457,7 @@ public partial class RailWindow : Window
 
         // The rail stays where it was dropped — anywhere on the screen —
         // clamped fully inside the work area; the nearest edge is recorded
-        // only to steer which side the hover card opens on. Do NOT
-        // ScheduleCollapse here: the mouse is still over the rail after the
-        // drop. Collapse is MouseLeave's job.
+        // only to steer which side the hover card opens on.
         var area = AreaUnderPointer();
         var (edge, left, top) = RailPlacement.Settle(
             Left, Top, Math.Max(ActualWidth, Width), Math.Max(ActualHeight, Height),

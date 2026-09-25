@@ -28,6 +28,8 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **小米的无套餐读数与故障分离。** 200 内信封里的 401/403 按会话过期上报、其余拒绝与坏形状按结构变化上报；确认没有套餐（含已过期套餐）清掉旧读数，不再被缓存顶回。
 - **外部输入面加防御边界。** `pulse://` 链接与待处理命令文件按长度封顶、只接受三个已知动作；status line 载荷读取封顶（1M 字符），CLI 的 settings.json 改为临时文件原子替换；更新 tag 超长不再采信；UI 线程异常在 60 秒内超过 32 次时不再无限吞掉（避免崩溃死循环）。
 - **悬浮条可以手动拖动，放到屏幕任意位置。** 按住悬浮条的空白表面（圆环除外）拖到哪里就停在哪里——不再强制吸附到屏幕边缘，只要求完整保持在屏幕工作区内；拖动开始时详情卡收起，位置按显示器与归一化偏移持久化，重启或分辨率变化都不会甩出屏幕；详情卡朝远离最近边缘的一侧打开。
+- **悬停详情卡成为唯一的悬停表面。** 移除了圆环上的原生 ToolTip——之前悬停约半秒会弹出一个空白/灰白的小方框（与详情卡重复，标题为空时尤其明显），形似悬浮条外多余的灰色矩形。
+- **悬浮条不再自动折叠成细条。** 之前鼠标离开两秒后悬浮条会收缩成 10px 的细长条（数字消失、难以再悬停展开）；现在圆环常驻显示。
 - **设置开关与本地状态写入自修复。** 修复一个真实 Bug：旧版本可能把状态文件（enablement.json 等）的 ACL 留成空 DACL——所有人都被拒绝访问，导致勾选服务商开关、拖动位置等所有本地状态静默失效（每次写入都抛「拒绝访问」并被全局异常日志吞掉）。现在状态文件写入被拒时自动以文件属主身份重新授权并重试一次；ACL 收紧逻辑同时修复了「用户 SID 缺失时留下空 DACL」的源头缺陷。
 - **悬停详情卡的触发范围扩大到整个圆环。** 之前圆面是自绘元素且无背景画刷，只有圆环下方的数字能唤出详情卡；现在整个圆（含数字区域）都能触发。
 
@@ -50,6 +52,8 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Xiaomi's no-plan reading is separated from its faults.** A 401/403 envelope inside HTTP 200 reports as an expired session, other refusals and bad shapes as a schema change; a confirmed no-plan account (expired plans included) clears its old reading instead of letting cache bring it back.
 - **Defense boundaries on the external input surfaces.** `pulse://` links and the pending-command file are length-capped and accept only the three known actions; the status line payload read is capped (1M characters) and the CLI's settings.json is written atomically via a temp file; an absurdly long update tag is never offered; and after more than 32 dispatcher exceptions inside a minute the app stops swallowing them instead of spinning in a crash loop.
 - **The rail can be dragged by hand and parked anywhere on the screen.** Press its empty surface (rings excluded) and it stays exactly where dropped — always clamped fully inside the monitor's work area, no longer forced onto an edge; the detail card folds away for the drag, the placement persists per monitor, and the card opens on the side away from the nearest edge.
+- **The hover card is the only hover surface.** The native tooltips on the rings are gone — hovering used to pop a blank grey/white box (most visible when the title was empty) that duplicated the card and read as a stray rectangle around the rail.
+- **The rail no longer folds into a sliver.** Two seconds after the pointer left, the rail used to shrink to a 10px strip that hid the numbers and was hard to hover back open; the rings stay up.
 - **Settings toggles and every local state write now self-repair.** Fixed a real bug: older builds could leave a state file (enablement.json among them) with an EMPTY DACL — every write denied for everyone, so toggling a provider, the dragged rail position, and every other preference silently failed. State writes now repair the ACL (the owner can always re-grant themselves) and retry once, and the ACL-tightening code no longer leaves an empty DACL when no user SID is available.
 - **The hover card now triggers on the whole ring.** The circle itself is a custom-drawn element without a background brush, so only the number underneath used to summon the card; the full ring area does now.
 

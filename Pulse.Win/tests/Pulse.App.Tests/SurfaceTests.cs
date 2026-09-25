@@ -127,8 +127,9 @@ public class SurfaceTests
             Assert.Equal("20%", primaryRing!.FigureText);
             // 80% used is past the "N% left" step.
             Assert.Equal(Ui.PercentLeft(20), addedRing!.FigureText);
-            Assert.Contains("工作", (string)addedRing.ToolTip!);
-            Assert.DoesNotContain("工作", (string)primaryRing.ToolTip!);
+            // Labels live on the hover card now, not on a native tooltip.
+            Assert.Contains("工作", RailWindow.TitleOf(added));
+            Assert.DoesNotContain("工作", RailWindow.TitleOf(primary));
             rail.Close();
         });
     }
