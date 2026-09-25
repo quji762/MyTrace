@@ -20,7 +20,6 @@ namespace Pulse.App;
 /// </summary>
 public partial class RailWindow : Window
 {
-    private const double SnapThreshold = 24;
     private const double RailWidth = 64;
     private const double CollapsedWidth = 10;
 
@@ -497,6 +496,11 @@ public partial class RailWindow : Window
 
     private void OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        // The drag must own the pointer: the hover card is a separate HWND
+        // that would otherwise take the press, and the collapse timer must
+        // not fold the shell mid-drag if the pointer slips off it.
+        _hoverCard.IsOpen = false;
+        _collapseTimer.Stop();
         _dragging = true;
         _dragOffset = e.GetPosition(this);
         CaptureMouse();
@@ -519,22 +523,26 @@ public partial class RailWindow : Window
         _dragging = false;
         ReleaseMouseCapture();
 
-        // Dock to whichever edge we snapped against, then persist normalized.
-        // Do NOT ScheduleCollapse here — the mouse is still over the rail after
-        // a click. Collapse is MouseLeave's job.
+        // The drop docks to the nearer edge — a mid-screen drop settles there
+        // instead of snapping back on the next expand — and keeps its height,
+        // clamped so the rail cannot be parked off the monitor. Do NOT
+        // ScheduleCollapse here: the mouse is still over the rail after the
+        // drop. Collapse is MouseLeave's job.
         var area = AreaUnderPointer();
-        if (Left - area.Left < SnapThreshold) _preferences.DockedEdge = "left";
-        else if (area.Right - (Left + Width) < SnapThreshold) _preferences.DockedEdge = "right";
+        var (edge, left, top) = RailPlacement.Settle(
+            Left, Top, Math.Max(ActualWidth, Width), Math.Max(ActualHeight, Height),
+            area.Left, area.Top, area.Width, area.Height);
+        _preferences.DockedEdge = edge;
+        Left = left;
+        Top = top;
         PersistPosition();
     }
 
     private void SnapToEdges()
     {
         var area = AreaUnderPointer();
-        if (Left - area.Left < SnapThreshold) Left = area.Left;
-        if (area.Right - (Left + Width) < SnapThreshold) Left = area.Right - Width;
-        if (Top - area.Top < SnapThreshold) Top = area.Top;
-        if (area.Bottom - (Top + Height) < SnapThreshold) Top = area.Bottom - Height;
+        Left = RailPlacement.SnapAxis(Left, Math.Max(ActualWidth, Width), area.Left, area.Width);
+        Top = RailPlacement.SnapAxis(Top, Math.Max(ActualHeight, Height), area.Top, area.Height);
     }
 
     // --- Per-monitor DPI v2 -------------------------------------------------------
