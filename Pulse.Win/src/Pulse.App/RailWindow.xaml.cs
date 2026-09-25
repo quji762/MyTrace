@@ -38,6 +38,11 @@ public partial class RailWindow : Window
         if (account.IsBorrowed || string.IsNullOrWhiteSpace(account.Label) ||
             string.Equals(account.AccountId, account.Provider.ToString(), StringComparison.Ordinal))
         {
+            // The Codex primary is whoever the CLI logged in as -- its own
+            // auth.json names that account, which the id alone never did.
+            if (account.Provider == ProviderId.Codex
+                && Providers.Codex.CodexProvider.CliAccountEmail() is { } email)
+                return $"{name} — {email}";
             return name;
         }
         return $"{name} — {account.Label}";

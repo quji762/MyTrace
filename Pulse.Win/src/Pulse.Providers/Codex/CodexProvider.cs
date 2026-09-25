@@ -30,6 +30,45 @@ public sealed class CodexProvider : HttpUsageProviderBase
         _cliCredentialsLocator = cliCredentialsLocator;
     }
 
+    private static string? _cachedEmail;
+
+    /// <summary>
+    /// Who the Codex CLI is logged in as, from its own auth.json: the JWT
+    /// payload's email claim, read once and cached. Null when the CLI has no
+    /// login or the token names no address. Display only -- the rail cannot
+    /// tell two Codex accounts apart without it.
+    /// </summary>
+    public static string? CliAccountEmail()
+    {
+        if (_cachedEmail is not null) return _cachedEmail;
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".codex", "auth.json");
+            if (!File.Exists(path)) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.TryGetProperty("tokens", out var tokens)
+                && tokens.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var key in new[] { "id_token", "access_token" })
+                {
+                    if (tokens.TryGetProperty(key, out var token) && token.ValueKind == JsonValueKind.String
+                        && Pulse.Core.Accounts.JwtIdentity.Email(token.GetString()) is { } email)
+                    {
+                        _cachedEmail = email;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return _cachedEmail;
+    }
+
     public override ProviderId Id => ProviderId.Codex;
     public override ProviderCapabilities Capabilities => ProviderCapabilities.For(ProviderId.Codex);
     protected override string Endpoint => EndpointUrl;

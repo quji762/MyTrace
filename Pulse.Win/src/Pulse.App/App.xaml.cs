@@ -245,6 +245,14 @@ public partial class App : System.Windows.Application
         _rail?.AllowProviderAll(provider);
     }
 
+    /// <summary>Called when an added account's visibility changes in Settings:
+    /// drop its ring, or clear the denial so it can come back.</summary>
+    internal void NotifyAccountVisibility(MonitoredAccount account, bool visible)
+    {
+        if (visible) _rail?.AllowProvider(account);
+        else _rail?.RemoveProvider(account);
+    }
+
     /// <summary>
     /// Apply the hide-tray-icon preference. Refuses to hide when no other
     /// entry point (rail or global hotkey) remains — matching upstream's
@@ -467,14 +475,16 @@ public partial class App : System.Windows.Application
             inner.RemoveSecret(provider, accountId);
     }
 
-    /// <summary>Primary account for every provider, plus added slots where the provider allows them.</summary>
+    /// <summary>Primary account for every provider, plus added slots where the provider allows them.
+    /// An added slot the user hid in Settings is left out entirely: not read, not shown.</summary>
     private static IReadOnlyList<MonitoredAccount> AccountsOf(MultiAccountStore accounts)
     {
         var list = new List<MonitoredAccount>();
         foreach (var id in Enum.GetValues<ProviderId>())
         {
             if (MultiAccountCapability.Supports(id))
-                list.AddRange(accounts.MonitoredAccounts(id));
+                list.AddRange(accounts.MonitoredAccounts(id).Where(account =>
+                    account.IsBorrowed || AccountVisibility.IsVisible(id, account.AccountId)));
             else
                 list.Add(new MonitoredAccount { Provider = id, AccountId = id.ToString() });
         }

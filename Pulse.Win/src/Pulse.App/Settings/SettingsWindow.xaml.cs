@@ -65,6 +65,7 @@ public partial class SettingsWindow : Window
         public string Slot { get; init; } = "";
         public string Label { get; set; } = "";
         public string DisplayName { get; init; } = "";
+        public bool Visible { get; init; }
         public string RenameText { get; init; } = Ui.RenameAccount;
         public string SignInAgainText { get; init; } = Ui.SignInAgain;
         public string RemoveText { get; init; } = Ui.RemoveAccount;
@@ -339,6 +340,7 @@ public partial class SettingsWindow : Window
                         Slot = stored.Slot,
                         Label = stored.Label ?? stored.Slot,
                         DisplayName = DisplayName(id),
+                        Visible = Pulse.Core.Platform.AccountVisibility.IsVisible(id, stored.Slot),
                     })
                     .ToList(),
             })
@@ -452,7 +454,10 @@ public partial class SettingsWindow : Window
                 return;
             }
 
-            _multiAccount.Add(row.Provider, tokens.Serialize(), label: $"added {DateTime.Now:MM-dd HH:mm}");
+            // Name the slot by its real identity when the token carries one.
+            var label = Pulse.Core.Accounts.JwtIdentity.Email(tokens.AccessToken)
+                        ?? $"added {DateTime.Now:MM-dd HH:mm}";
+            _multiAccount.Add(row.Provider, tokens.Serialize(), label: label);
             Reload();
         }
         catch (OperationCanceledException)
@@ -532,6 +537,20 @@ public partial class SettingsWindow : Window
         if (label is null) return;
         _multiAccount.Rename(item.Provider, item.Slot, label);
         Reload();
+    }
+
+    private void OnAccountVisibleToggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.CheckBox { DataContext: AddedAccountItem item } cb) return;
+        var visible = cb.IsChecked == true;
+        // Template bindings fire this with the stored value; only a real
+        // change may touch the file or the rail.
+        if (Pulse.Core.Platform.AccountVisibility.IsVisible(item.Provider, item.Slot) == visible) return;
+
+        Pulse.Core.Platform.AccountVisibility.Set(item.Provider, item.Slot, visible);
+        if (System.Windows.Application.Current is App app)
+            app.NotifyAccountVisibility(
+                new MonitoredAccount { Provider = item.Provider, AccountId = item.Slot }, visible);
     }
 
     private void OnRemoveAccount(object sender, RoutedEventArgs e)

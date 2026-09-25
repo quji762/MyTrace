@@ -121,18 +121,24 @@
                                             <DataTemplate>
                                                 <Grid Margin="0,3">
                                                     <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                    <CheckBox VerticalAlignment="Center" Margin="0,0,6,0"
+                                                              IsChecked="{Binding Visible, Mode=OneWay}"
+                                                              Checked="OnAccountVisibleToggled"
+                                                              Unchecked="OnAccountVisibleToggled" Tag="{Binding}"
+                                                              ToolTip="Show this account on the rail" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center"
                                                                FontSize="12" />
-                                                    <Button Grid.Column="1" Content="{Binding RenameText}" FontSize="11" Margin="4,0"
+                                                    <Button Grid.Column="2" Content="{Binding RenameText}" FontSize="11" Margin="4,0"
                                                             Click="OnRenameAccount" Tag="{Binding}" />
-                                                    <Button Grid.Column="2" Content="{Binding SignInAgainText}" FontSize="11" Margin="4,0"
+                                                    <Button Grid.Column="3" Content="{Binding SignInAgainText}" FontSize="11" Margin="4,0"
                                                             Click="OnSignInAgain" Tag="{Binding}" />
-                                                    <Button Grid.Column="3" Content="{Binding RemoveText}" FontSize="11" Margin="4,0"
+                                                    <Button Grid.Column="4" Content="{Binding RemoveText}" FontSize="11" Margin="4,0"
                                                             Click="OnRemoveAccount" Tag="{Binding}" />
                                                 </Grid>
                                             </DataTemplate>
