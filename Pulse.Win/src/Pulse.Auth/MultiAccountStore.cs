@@ -164,7 +164,7 @@ public sealed class MultiAccountStore
             Pulse.Core.Platform.SecureState.Protect(_indexPath);
             var json = System.Text.Json.JsonSerializer.Serialize(
                 all.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value));
-            var tmp = _indexPath + ".tmp"; File.WriteAllText(tmp, json); File.Move(tmp, _indexPath, overwrite: true);
+            Pulse.Core.Platform.SecureState.WriteStateTextAtomic(_indexPath, json);
         }
         catch (Exception) { }
     }

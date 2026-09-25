@@ -37,7 +37,9 @@ public static class ProviderEnablement
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var raw = overrides.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value);
-        File.WriteAllText(path, JsonSerializer.Serialize(raw));
+        // Self-repairing write: a legacy empty-DACL state file denies every
+        // write; the owner can re-grant themselves and retry.
+        Platform.SecureState.WriteStateText(path, JsonSerializer.Serialize(raw));
     }
 
     public static bool IsEnabled(

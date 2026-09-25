@@ -1,3 +1,5 @@
+using static Pulse.Core.Platform.SecureState;
+
 namespace Pulse.Core.Platform;
 
 /// <summary>
@@ -33,7 +35,7 @@ public static class TrayPreferences
         {
             var file = path ?? DefaultPath();
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, hidden ? "on" : "off");
+            WriteStateText(file, hidden ? "on" : "off");
         }
         catch (Exception)
         {

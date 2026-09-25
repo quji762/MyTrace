@@ -171,7 +171,7 @@ public static class ThemeManager
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(PrefsPath)!);
-            File.WriteAllText(PrefsPath, theme.ToString());
+            Pulse.Core.Platform.SecureState.WriteStateText(PrefsPath, theme.ToString());
         }
         catch (Exception) { }
     }

@@ -16,7 +16,7 @@ public static class DurableUsageCache
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
-        File.WriteAllText(path, JsonSerializer.Serialize(usage, Json));
+        Platform.SecureState.WriteStateText(path, JsonSerializer.Serialize(usage, Json));
     }
 
     public static ProviderUsage? Load(string path, DateTimeOffset now)

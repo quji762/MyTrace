@@ -1,3 +1,5 @@
+using static Pulse.Core.Platform.SecureState;
+
 namespace Pulse.Core.Platform;
 
 /// <summary>
@@ -93,7 +95,7 @@ public static class DeepLink
             SecureState.EnsureStateDirectory();
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             var account = command.AccountId is null ? "" : Uri.EscapeDataString(command.AccountId);
-            File.WriteAllText(file, $"{command.Action}\n{account}\n{Guid.NewGuid():N}");
+            WriteStateText(file, $"{command.Action}\n{account}\n{Guid.NewGuid():N}");
         }
         catch (Exception)
         {

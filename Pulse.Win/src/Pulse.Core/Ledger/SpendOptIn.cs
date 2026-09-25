@@ -19,6 +19,6 @@ public static class SpendOptIn
     public static void Save(string path, bool enabled)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, enabled ? "on" : "off");
+        Platform.SecureState.WriteStateText(path, enabled ? "on" : "off");
     }
 }

@@ -1,3 +1,5 @@
+using static Pulse.Core.Platform.SecureState;
+
 namespace Pulse.Core.Platform;
 
 /// <summary>Whether the global toggle hotkey is on. Stored beside the other
@@ -28,7 +30,7 @@ public static class HotkeyPreferences
         {
             var file = path ?? DefaultPath();
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, enabled ? "on" : "off");
+            WriteStateText(file, enabled ? "on" : "off");
         }
         catch (Exception)
         {

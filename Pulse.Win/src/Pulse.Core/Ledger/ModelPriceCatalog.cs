@@ -391,7 +391,7 @@ public static class ModelPriceCatalog
                 table[id] = new CachedPrice(price.Name, price.Input, price.CacheRead, price.CacheWrite, price.Output);
             var payload = JsonSerializer.Serialize(
                 new CachedTable(DateTimeOffset.UtcNow, table));
-            File.WriteAllText(Path.Combine(directory, CacheFileName), payload);
+            Platform.SecureState.WriteStateText(Path.Combine(directory, CacheFileName), payload);
         }
         catch (Exception) { }
     }

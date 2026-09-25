@@ -38,7 +38,7 @@ public sealed class RailPreferences
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-            File.WriteAllText(Path, JsonSerializer.Serialize(this));
+            Pulse.Core.Platform.SecureState.WriteStateText(Path, JsonSerializer.Serialize(this));
         }
         catch (Exception) { }
     }

@@ -189,7 +189,7 @@ public sealed class TranscriptScanner
             var entries = _cache
                 .Where(kv => kv.Key.Contains(kind == TranscriptKind.ClaudeCode ? ".claude" : ".codex", StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
-            File.WriteAllText(Path.Combine(dir, $"ledger-4-{kind.ToString().ToLowerInvariant()}.json"),
+            Platform.SecureState.WriteStateText(Path.Combine(dir, $"ledger-4-{kind.ToString().ToLowerInvariant()}.json"),
                 System.Text.Json.JsonSerializer.Serialize(entries));
         }
         catch (Exception) { }

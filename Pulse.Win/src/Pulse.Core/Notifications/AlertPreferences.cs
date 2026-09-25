@@ -31,7 +31,7 @@ public static class AlertPreferences
     public static void Save(string path, AlertLevel level)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(level.ToString()));
+        Platform.SecureState.WriteStateText(path, JsonSerializer.Serialize(level.ToString()));
     }
 
     public static double[] Thresholds(AlertLevel level) => level switch

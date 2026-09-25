@@ -64,7 +64,7 @@ public static class UiLanguage
         {
             var file = PrefsPath();
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, language == Language.English ? "en" : "zh");
+            Pulse.Core.Platform.SecureState.WriteStateText(file, language == Language.English ? "en" : "zh");
         }
         catch (Exception)
         {

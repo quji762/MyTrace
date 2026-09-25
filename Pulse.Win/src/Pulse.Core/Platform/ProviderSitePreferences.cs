@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Pulse.Core.Providers;
 
+using static Pulse.Core.Platform.SecureState;
+
 namespace Pulse.Core.Platform;
 
 /// <summary>
@@ -48,9 +50,7 @@ public static class ProviderSitePreferences
             if (File.Exists(file))
                 sites = JsonSerializer.Deserialize<Dictionary<string, bool>>(File.ReadAllText(file)) ?? [];
             sites[id.ToString()] = useChina;
-            var tmp = file + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(sites));
-            File.Move(tmp, file, overwrite: true);
+            WriteStateTextAtomic(file, JsonSerializer.Serialize(sites));
         }
         catch (Exception)
         {

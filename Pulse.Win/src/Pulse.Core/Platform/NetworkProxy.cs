@@ -1,5 +1,7 @@
 using System.Net;
 
+using static Pulse.Core.Platform.SecureState;
+
 namespace Pulse.Core.Platform;
 
 /// <summary>Follow System (default) or one manual HTTP/SOCKS endpoint. Mirrors
@@ -50,7 +52,7 @@ public sealed record NetworkProxy(ProxyMode Mode, string? Host, int? Port)
         {
             var file = path ?? DefaultPath();
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(this));
+            WriteStateText(file, System.Text.Json.JsonSerializer.Serialize(this));
         }
         catch (Exception)
         {
