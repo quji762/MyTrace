@@ -35,6 +35,11 @@ public sealed class RingControl : StackPanel
         Orientation = System.Windows.Controls.Orientation.Vertical;
         HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
         Margin = new Thickness(0, 0, 0, 18);
+        // Transparent (not null) so the WHOLE ring hit-tests: the face draws a
+        // fill-less ellipse in OnRender, and a panel without a background brush
+        // is hit-testable only where its children are — hovering the circle
+        // itself did nothing, only the number underneath summoned the card.
+        Background = Brushes.Transparent;
 
         _face = new Face(provider)
         {

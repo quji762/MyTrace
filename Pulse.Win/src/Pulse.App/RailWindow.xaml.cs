@@ -499,6 +499,11 @@ public partial class RailWindow : Window
 
     private void OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        // Rings own their presses: they are hover targets, and dragging from
+        // one reads as an accident. Only the rail surface around them drags
+        // the window.
+        if (WithinRing(e.OriginalSource as System.Windows.DependencyObject)) return;
+
         // The drag must own the pointer: the hover card is a separate HWND
         // that would otherwise take the press, and the collapse timer must
         // not fold the shell mid-drag if the pointer slips off it.
@@ -507,6 +512,17 @@ public partial class RailWindow : Window
         _dragging = true;
         _dragOffset = e.GetPosition(this);
         CaptureMouse();
+    }
+
+    private static bool WithinRing(System.Windows.DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is RingControl) return true;
+            source = System.Windows.Media.VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
