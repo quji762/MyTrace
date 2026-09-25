@@ -80,6 +80,9 @@ public static class UpdateSelection
     {
         parsed = default;
         const string prefix = "windows-v";
+        // A release tag is short; the tag text also ends up in tray copy, so
+        // anything absurdly long was never one of ours.
+        if (tag.Length > 100) return false;
         if (!tag.StartsWith(prefix, StringComparison.Ordinal)) return false;
         var rest = tag[prefix.Length..];
         if (rest.Contains('-', StringComparison.Ordinal)) return false;

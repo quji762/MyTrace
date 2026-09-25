@@ -146,22 +146,34 @@ public sealed class QoderProvider : HttpUsageProviderBase
         return UsageExpiry.Soonest(packs, now);
     }
 
-    /// <summary>A date Qoder stated, or null: ISO 8601 text, or a Unix stamp in
-    /// seconds or milliseconds; zero is no date.</summary>
+    /// <summary>A date Qoder stated, or null: a Unix stamp in seconds or
+    /// milliseconds, or ISO 8601 text — the same field has been seen as a
+    /// number and as text. Zero is no date.</summary>
     private static DateTimeOffset? GetDate(JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var value)) return null;
         return value.ValueKind switch
         {
-            JsonValueKind.Number when value.TryGetInt64(out var stamp) && stamp > 0 =>
-                stamp > 10_000_000_000
-                    ? DateTimeOffset.FromUnixTimeMilliseconds(stamp)
-                    : DateTimeOffset.FromUnixTimeSeconds(stamp),
-            JsonValueKind.String when value.GetString() is { } text
-                && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) => parsed,
+            JsonValueKind.Number when value.TryGetDouble(out var stamp) && stamp > 0 => FromStamp(stamp),
+            JsonValueKind.String when value.GetString() is { } text => ParseDateText(text),
             _ => null,
         };
     }
+
+    private static DateTimeOffset? ParseDateText(string text)
+    {
+        // Numeric stamps first: an all-digit text is never an ISO date.
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var stamp))
+            return stamp > 0 ? FromStamp(stamp) : null;
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static DateTimeOffset FromStamp(double stamp) =>
+        stamp > 10_000_000_000
+            ? DateTimeOffset.FromUnixTimeMilliseconds((long)stamp)
+            : DateTimeOffset.FromUnixTimeSeconds((long)stamp);
 
     /// <summary>Absent or null counts as active; only an explicit false is out.</summary>
     private static bool IsExplicitFalse(JsonElement element, string name) =>

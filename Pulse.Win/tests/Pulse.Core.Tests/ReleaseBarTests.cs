@@ -461,6 +461,16 @@ public class ReleaseBarTests : IDisposable
     }
 
     [Fact]
+    public void Absurdly_Long_Tags_Are_Not_Release_Tags()
+    {
+        // The tag text ends up in tray copy; something enormous was never one
+        // of ours and must not be offered or shown.
+        Assert.False(UpdateSelection.TryParseStable("windows-v" + new string('1', 500), out _));
+        Assert.False(UpdateSelection.IsNewer("0.9.0.0", "windows-v" + new string('1', 500)));
+        Assert.True(UpdateSelection.IsNewer("0.9.0.0", "windows-v1.0.0"));
+    }
+
+    [Fact]
     public void Older_Stable_Tag_Stays_Quiet()
     {
         const string olderOnly = """[{"tag_name":"windows-v0.2.0"}]""";

@@ -26,6 +26,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Qoder 积分包到期日与无积分状态。** 卡片在重置时间的位置显示最早到期的一批积分（同一天的合并计算），`--json` 新增 `expiresAt` 与 `expiringAmount`；账号确认没有任何积分时清掉内存与磁盘上的旧读数，不再被缓存或重启顶回。字段同时兼容国际站的驼峰与国内站的蛇形混排。
 - **双站点服务商可以切换站点。** Qoder（国际/国内）与 StepFun（默认国内站）在设置的凭据行里提供站点选择；切换立即生效于下一轮读取，并按上游规则丢弃已保存的会话——一个站点的会话绝不发往另一个站点。
 - **小米的无套餐读数与故障分离。** 200 内信封里的 401/403 按会话过期上报、其余拒绝与坏形状按结构变化上报；确认没有套餐（含已过期套餐）清掉旧读数，不再被缓存顶回。
+- **外部输入面加防御边界。** `pulse://` 链接与待处理命令文件按长度封顶、只接受三个已知动作；status line 载荷读取封顶（1M 字符），CLI 的 settings.json 改为临时文件原子替换；更新 tag 超长不再采信；UI 线程异常在 60 秒内超过 32 次时不再无限吞掉（避免崩溃死循环）。
 
 **English**
 
@@ -44,6 +45,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Qoder pack expiry and the no-credits state.** The card's reset slot shows the soonest packs to lapse (same-day packs summed), and `--json` gains `expiresAt` / `expiringAmount`; an account confirmed to hold no credits clears its previous reading from memory and disk instead of letting cache or a relaunch bring it back. Both the international camelCase and the mainland's mixed snake_case spellings are accepted.
 - **Dual-site providers can switch sites.** Qoder (international/China) and StepFun (China by default) offer the site choice on their settings credential row; a switch applies on the next refresh pass and discards the saved session, as upstream's rule does — a session for one host is never sent to the other.
 - **Xiaomi's no-plan reading is separated from its faults.** A 401/403 envelope inside HTTP 200 reports as an expired session, other refusals and bad shapes as a schema change; a confirmed no-plan account (expired plans included) clears its old reading instead of letting cache bring it back.
+- **Defense boundaries on the external input surfaces.** `pulse://` links and the pending-command file are length-capped and accept only the three known actions; the status line payload read is capped (1M characters) and the CLI's settings.json is written atomically via a temp file; an absurdly long update tag is never offered; and after more than 32 dispatcher exceptions inside a minute the app stops swallowing them instead of spinning in a crash loop.
 
 ## 1.3.1
 

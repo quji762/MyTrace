@@ -68,6 +68,21 @@ public class StatusLineHookTests : IDisposable
     }
 
     [Fact]
+    public void Bounded_Payload_Read_Stops_At_The_Cap()
+    {
+        // A pipe that never ends must not balloon memory in a process that
+        // runs after every response. Over the cap the payload is discarded
+        // outright: a truncated JSON blob would not parse anyway.
+        using var within = new System.IO.StringReader(new string('x', 500));
+        Assert.Equal(500, StatusLineCapture.ReadBoundedPayload(within, 2000)!.Length);
+
+        using var over = new System.IO.StringReader(new string('x', 5000));
+        Assert.Null(StatusLineCapture.ReadBoundedPayload(over, 2000));
+
+        Assert.Equal("", StatusLineCapture.ReadBoundedPayload(new System.IO.StringReader(""), 1000));
+    }
+
+    [Fact]
     public void Install_Registers_And_Uninstall_Restores()
     {
         Assert.False(StatusLineInstaller.IsInstalled(_home));

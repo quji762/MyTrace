@@ -22,7 +22,9 @@ public static class CrashLogger
     private const long MaxBytes = 5 * 1024 * 1024;
 
     private static readonly object Gate = new();
+    private static readonly object DispatcherGate = new();
     private static readonly SecretScrubber SharedScrubber = new();
+    private static readonly List<DateTimeOffset> DispatcherCrashes = new();
     private static string _directory = null!;
     private static bool _installed;
 
@@ -49,6 +51,18 @@ public static class CrashLogger
         System.Windows.Application.Current?.DispatcherUnhandledException += (_, args) =>
         {
             Write("DispatcherUnhandledException", args.Exception, isTerminating: false);
+            // A handler that keeps failing (a poisoned template, a rendering
+            // loop) must not become an infinite crash loop: after too many
+            // dispatcher exceptions inside a minute, stop swallowing them and
+            // let the process die visibly instead of spinning forever.
+            var now = DateTimeOffset.UtcNow;
+            lock (DispatcherGate)
+            {
+                DispatcherCrashes.RemoveAll(at => now - at > TimeSpan.FromSeconds(60));
+                DispatcherCrashes.Add(now);
+                if (DispatcherCrashes.Count > 32) return;
+            }
+
             args.Handled = true; // prevent flash-exit; the app stays up
         };
 

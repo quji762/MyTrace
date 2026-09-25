@@ -1,4 +1,5 @@
 using System.Security;
+using System.Text;
 using System.Text.Json;
 
 namespace Pulse.Core.ClaudeHook;
@@ -148,6 +149,7 @@ public static class StatusLineInstaller
 
     private static bool WriteSettings(string path, Dictionary<string, JsonElement> settings)
     {
+        var temporary = path + ".pulse-tmp";
         try
         {
             // Keep a copy of the file as it was before Pulse first touched it.
@@ -160,11 +162,23 @@ public static class StatusLineInstaller
             {
                 WriteIndented = true,
             };
-            File.WriteAllText(path, JsonSerializer.Serialize(settings, options));
+            // Temp-file + replace: a crash mid-write must not leave the CLI a
+            // settings.json it cannot parse — the backup only covers the first
+            // touch, later writes rely on the replace being atomic.
+            File.WriteAllText(temporary, JsonSerializer.Serialize(settings, options));
+            File.Move(temporary, path, overwrite: true);
             return true;
         }
         catch (Exception)
         {
+            try
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
+            catch (Exception)
+            {
+            }
+
             return false;
         }
     }
@@ -179,6 +193,33 @@ public static class StatusLineInstaller
 public static class StatusLineCapture
 {
     public sealed record CapturedUsage(DateTimeOffset CapturedAt, double? FiveHourPercent, double? SevenDayPercent, DateTimeOffset? FiveHourReset, DateTimeOffset? SevenDayReset);
+
+    /// <summary>
+    /// The stdin payload is whatever the registered command pipes in, and this
+    /// process runs after every response — a broken or hostile pipe must not be
+    /// able to balloon its memory. Real status line payloads are a few
+    /// kilobytes. Returns null when the stream runs past the cap or errors.
+    /// </summary>
+    public static string? ReadBoundedPayload(TextReader reader, int maxChars = 1_000_000)
+    {
+        try
+        {
+            var text = new StringBuilder();
+            var buffer = new char[4096];
+            int read;
+            while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                text.Append(buffer, 0, read);
+                if (text.Length > maxChars) return null;
+            }
+
+            return text.ToString();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Process one status line payload: bank the usage part atomically (a

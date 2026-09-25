@@ -66,7 +66,7 @@ public partial class App : System.Windows.Application
         // worse than one that says nothing.
         if (e.Args.Contains(Pulse.Core.ClaudeHook.StatusLinePaths.ModeArgument))
         {
-            var payload = Console.In.ReadToEnd();
+            var payload = Pulse.Core.ClaudeHook.StatusLineCapture.ReadBoundedPayload(Console.In);
             var home = Environment.GetEnvironmentVariable("PULSE_HOME");
             var line = StatusLineCapture.RunAsStatusLine(payload, string.IsNullOrEmpty(home) ? null : home);
             if (!string.IsNullOrEmpty(line))

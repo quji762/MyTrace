@@ -72,6 +72,23 @@ public class QoderContractTests
     }
 
     [Fact]
+    public void Epoch_String_Dates_Parse_As_Stamps_Not_Iso()
+    {
+        // The same date field has been seen as a number and as text; a bare
+        // number must never be handed to the ISO parser.
+        const string json = """
+            { "totalQuota": { "quotaSummary": { "usedValue": 1, "limitValue": 500 },
+              "quotaDetail": [ { "remainingValue": 7, "expiresAt": "1792283400" } ] } }
+            """;
+        var usage = Parse(json);
+
+        var window = Assert.Single(usage.Windows);
+        var expiry = window.Expiry;
+        Assert.NotNull(expiry);
+        Assert.Equal(new DateTimeOffset(2026, 10, 18, 0, 30, 0, TimeSpan.Zero), expiry!.At);
+    }
+
+    [Fact]
     public void Unix_Stamp_Dates_Parse_In_Seconds_And_Milliseconds()
     {
         const string json = """

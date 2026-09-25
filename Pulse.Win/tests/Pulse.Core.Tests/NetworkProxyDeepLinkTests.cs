@@ -93,4 +93,40 @@ public class DeepLinkTests
         Assert.Equal("Codex#1", taken.AccountId);
         Assert.Null(DeepLink.TakePending());
     }
+
+    [Fact]
+    public void Pending_File_Boundaries_Are_Enforced()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"pulse-deeplink-{Guid.NewGuid():N}.txt");
+        try
+        {
+            // The pending file is state on disk; only the three known actions
+            // survive a drain, never an arbitrary command.
+            File.WriteAllText(path, "shutdown\n\nxyz");
+            Assert.Null(DeepLink.TakePending(path));
+
+            // An oversized account id is not a command either.
+            DeepLink.WritePending(new DeepLink.Command(DeepLink.Command.Account, new string('a', 500)), path);
+            Assert.Null(DeepLink.TakePending(path));
+
+            // A hand-edited oversized file is discarded, not applied.
+            File.WriteAllText(path, "show\n\n" + new string('x', 5000));
+            Assert.Null(DeepLink.TakePending(path));
+
+            // A valid command still round-trips through the same path.
+            DeepLink.WritePending(new DeepLink.Command(DeepLink.Command.Settings), path);
+            Assert.Equal(DeepLink.Command.Settings, DeepLink.TakePending(path)!.Action);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Oversized_Uris_Are_Refused()
+    {
+        Assert.Null(DeepLink.ParseUri("pulse://account/" + new string('a', 5000)));
+        Assert.Equal("ok", DeepLink.ParseUri("pulse://account/ok")!.AccountId);
+    }
 }
