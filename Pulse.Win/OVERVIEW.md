@@ -108,16 +108,18 @@ Claude Provider 的回落读数链路。
 
 | 项 | 状态 |
 |---|---|
-| Claude Desktop 会话路由 | macOS 独有集成（Electron cookie + keychain），无 Windows 等价物 |
+| Claude Desktop 会话路由 | macOS 独有集成（Electron cookie + keychain），无 Windows 等价物；`UsageRoute.DesktopSession` 仅作枚举占位。status-line 钩子路由已落地（`Pulse.Core.ClaudeHook`） |
 | DSH zstd 解压 | .NET 无内置 zstd；压缩帧如实标 partial 而非静默清零（平台降级） |
-| 上游桌面功能 | 多语言 UI、`--json` 输出模式等未实现（更新检查/全局快捷键/deeplink/代理已落地） |
+| 上游 UI 表现层 | 小机器人动画、液态玻璃（macOS 26 材质）、时间圆环倒数外圈、按服务商的配置指南页未移植——Windows 端是纯圆环悬浮条 + 单窗口设置 |
+| 更新安装 | 检查与提醒已落地（GitHub releases + 托盘通知）；安装为手动下载，无 Sparkle 式自动安装 |
+| 会话登录方式 | 双站点服务商（Qoder/StepFun）为手动粘贴 + 设置里的站点选择；后续计划以隔离 WebView2 登录替代 |
 
 ## 构建 / 运行
 
 ```bash
 cd Pulse.Win
 dotnet build Pulse.Win.slnx
-dotnet test Pulse.Win.slnx        # 445 个测试
+dotnet test Pulse.Win.slnx        # 476 个测试
 dotnet run --project src/Pulse.App
 ```
 

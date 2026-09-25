@@ -13,8 +13,9 @@ namespace Pulse.Providers.Claude;
 /// `~/.claude/.credentials.json` (the macOS keychain route does not exist here,
 /// and DPAPI-protected variants are read through the same JSON shape).
 ///
-/// The status-line/desktop-session fallback routes are push-based macOS app
-/// integrations; they land with the Windows status-line hook integration. The
+/// The desktop-session fallback route is a push-based macOS app integration
+/// with no Windows equivalent (`UsageRoute.DesktopSession` stays a placeholder);
+/// the status-line hook route has landed — see Pulse.Core.ClaudeHook. The
 /// endpoint is the route that answers whenever asked.
 /// </summary>
 public sealed class ClaudeCodeProvider : HttpUsageProviderBase
