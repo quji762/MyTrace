@@ -3,9 +3,10 @@ using Xunit;
 namespace Pulse.App.Tests;
 
 /// <summary>
-/// Placement rules for dragging the rail by hand: the drop docks to the
-/// nearer vertical edge, the height is kept, and the rail can never be parked
-/// outside the monitor's work area.
+/// Placement rules for dragging the rail by hand: it stays where it was
+/// dropped — anywhere on the screen — clamped fully inside the monitor's work
+/// area, with no edge docking. The nearest edge is recorded for the hover
+/// card's side only.
 /// </summary>
 public class RailPlacementTests
 {
@@ -15,56 +16,45 @@ public class RailPlacementTests
     private const double AreaHeight = 1040;
 
     [Fact]
-    public void Drop_Nearer_The_Left_Edge_Docks_Left_And_Keeps_The_Height()
+    public void A_Mid_Screen_Drop_Stays_Where_Dropped()
     {
-        var (edge, left, top) = RailPlacement.Settle(100, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
+        var (edge, left, top) = RailPlacement.Settle(1200, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
 
-        Assert.Equal("left", edge);
-        Assert.Equal(AreaLeft, left);
-        Assert.Equal(300, top); // a mid-edge drop is a vertical position, not a snap
+        Assert.Equal(1200, left); // free placement: no edge docking
+        Assert.Equal(300, top);
+        Assert.Equal("right", edge); // recorded for the hover card's side only
     }
 
     [Fact]
-    public void Drop_Nearer_The_Right_Edge_Docks_Right()
+    public void A_Drop_Near_An_Edge_Is_Not_Pulled_OnTo_It()
     {
-        var (edge, left, _) = RailPlacement.Settle(1500, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
+        var (_, left, _) = RailPlacement.Settle(100, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
 
-        Assert.Equal("right", edge);
-        Assert.Equal(AreaWidth - 64, left);
+        Assert.Equal(100, left);
     }
 
     [Fact]
-    public void A_Mid_Screen_Drop_Settles_On_The_Nearer_Edge_Instead_Of_Snapping_Back()
+    public void The_Rail_Is_Clamped_Fully_Inside_The_Work_Area()
     {
-        // The old rule only switched edges within 24px, so a mid-screen drop
-        // kept the stale edge and the next expand pulled the rail back — the
-        // drag never stuck. The center decides now.
-        var (edge, left, _) = RailPlacement.Settle(1200, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
-
-        Assert.Equal("right", edge); // center 1232: 1232 from the left, 688 from the right
-        Assert.Equal(AreaWidth - 64, left);
-    }
-
-    [Fact]
-    public void The_Height_Is_Clamped_Inside_The_Work_Area()
-    {
-        // Dragged far past the bottom: it lands fully inside, flush with the
-        // bottom edge — the same rule the restore path applies.
         var (_, _, bottom) = RailPlacement.Settle(0, 2000, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
         Assert.Equal(AreaHeight - 400, bottom);
 
-        // Dragged above the top: it stops at the top edge.
         var (_, _, above) = RailPlacement.Settle(0, -300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
         Assert.Equal(AreaTop, above);
+
+        var (_, left, _) = RailPlacement.Settle(5000, 300, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
+        Assert.Equal(AreaWidth - 64, left);
     }
 
     [Fact]
-    public void Magnetic_Snap_Catches_Near_Edges_During_The_Drag()
+    public void While_Dragging_The_Center_May_Straddle_The_Work_Area_Edge()
     {
-        Assert.Equal(0, RailPlacement.SnapAxis(10, 64, 0, AreaWidth));
-        Assert.Equal(AreaWidth - 64, RailPlacement.SnapAxis(AreaWidth - 70, 64, 0, AreaWidth));
-        Assert.Equal(500, RailPlacement.SnapAxis(500, 64, 0, AreaWidth)); // mid-drag stays free
-        Assert.Equal(0, RailPlacement.SnapAxis(-30, 64, 0, AreaWidth)); // pulled past the edge
-        Assert.Equal(AreaHeight - 88, RailPlacement.SnapAxis(2000, 88, 0, AreaHeight)); // Y axis too
+        // The center decides which monitor contains the rail, so the body may
+        // cross the edge until the center does — that is how the drag reaches
+        // another display.
+        var (left, top) = RailPlacement.KeepCenterInside(1930, -200, 64, 400, AreaLeft, AreaTop, AreaWidth, AreaHeight);
+
+        Assert.Equal(AreaWidth - 32, left); // center exactly on the right edge
+        Assert.Equal(-200, top);            // center still inside vertically
     }
 }

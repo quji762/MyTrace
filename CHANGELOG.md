@@ -27,7 +27,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **双站点服务商可以切换站点。** Qoder（国际/国内）与 StepFun（默认国内站）在设置的凭据行里提供站点选择；切换立即生效于下一轮读取，并按上游规则丢弃已保存的会话——一个站点的会话绝不发往另一个站点。
 - **小米的无套餐读数与故障分离。** 200 内信封里的 401/403 按会话过期上报、其余拒绝与坏形状按结构变化上报；确认没有套餐（含已过期套餐）清掉旧读数，不再被缓存顶回。
 - **外部输入面加防御边界。** `pulse://` 链接与待处理命令文件按长度封顶、只接受三个已知动作；status line 载荷读取封顶（1M 字符），CLI 的 settings.json 改为临时文件原子替换；更新 tag 超长不再采信；UI 线程异常在 60 秒内超过 32 次时不再无限吞掉（避免崩溃死循环）。
-- **悬浮条可以手动拖动了。** 按住悬浮条拖到任意位置松开，自动停靠到更近的屏幕边缘并保留高度；拖动中靠近边缘有磁性吸附，详情卡在拖动开始时收起，位置按显示器与归一化偏移持久化——重启、展开折叠或分辨率变化都不会把悬浮条拉回旧位或甩出屏幕。
+- **悬浮条可以手动拖动，放到屏幕任意位置。** 按住悬浮条拖到哪里就停在哪里——不再强制吸附到屏幕边缘，只要求完整保持在屏幕工作区内；拖动开始时详情卡收起，位置按显示器与归一化偏移持久化，重启或分辨率变化都不会甩出屏幕；详情卡朝远离最近边缘的一侧打开。
 
 **English**
 
@@ -47,7 +47,7 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Dual-site providers can switch sites.** Qoder (international/China) and StepFun (China by default) offer the site choice on their settings credential row; a switch applies on the next refresh pass and discards the saved session, as upstream's rule does — a session for one host is never sent to the other.
 - **Xiaomi's no-plan reading is separated from its faults.** A 401/403 envelope inside HTTP 200 reports as an expired session, other refusals and bad shapes as a schema change; a confirmed no-plan account (expired plans included) clears its old reading instead of letting cache bring it back.
 - **Defense boundaries on the external input surfaces.** `pulse://` links and the pending-command file are length-capped and accept only the three known actions; the status line payload read is capped (1M characters) and the CLI's settings.json is written atomically via a temp file; an absurdly long update tag is never offered; and after more than 32 dispatcher exceptions inside a minute the app stops swallowing them instead of spinning in a crash loop.
-- **The rail can be dragged by hand.** Drag it anywhere and it settles onto the nearer screen edge, keeping its height; edges catch magnetically mid-drag, the detail card folds away for the drag, and the placement persists per monitor — a restart, an expand/collapse, or a resolution change can no longer pull it back to the old edge or fling it off-screen.
+- **The rail can be dragged by hand and parked anywhere on the screen.** It stays exactly where dropped — always clamped fully inside the monitor's work area, no longer forced onto an edge; the detail card folds away for the drag, the placement persists per monitor, and the card opens on the side away from the nearest edge.
 
 ## 1.3.1
 

@@ -92,16 +92,16 @@ public partial class RailWindow : Window
 
         Loaded += (_, _) =>
         {
-            DockToPreferredEdge();
+            RestorePosition();
             ApplyAutoCollapse();
             // DPI often settles after the first layout. Dock again once it has,
             // or a 96-DPI placement gets scaled off the monitor.
-            Dispatcher.BeginInvoke(DockToPreferredEdge, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            Dispatcher.BeginInvoke(RestorePosition, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         };
-        DpiChanged += (_, _) => DockToPreferredEdge();
+        DpiChanged += (_, _) => RestorePosition();
         SourceInitialized += (_, _) => ApplyPerMonitorV2();
         SystemParameters.StaticPropertyChanged += HandleDisplayPropertyChanged;
-        EventHandler onDisplay = (_, _) => Dispatcher.BeginInvoke(new Action(() => DockToPreferredEdge()));
+        EventHandler onDisplay = (_, _) => Dispatcher.BeginInvoke(new Action(() => RestorePosition()));
         DisplayChanged += onDisplay;
         Closed += (_, _) =>
         {
@@ -402,12 +402,15 @@ public partial class RailWindow : Window
 
     // --- Docking & persistence ----------------------------------------------------
 
-    private void DockToPreferredEdge()
+    private void RestorePosition()
     {
+        // Free placement: the stored normalized offsets decide both axes, so a
+        // hand-dragged mid-screen rail comes back mid-screen. The docked edge
+        // only steers which side the hover card opens on.
         var area = AreaFor(_preferences.MonitorDeviceName);
         var width = _collapsed ? CollapsedWidth : _expandedWidth;
         var height = _expandedHeight;
-        Left = _preferences.DockedEdge == "left" ? area.Left : area.Right - width;
+        Left = area.Left + _preferences.NormalizedX * Math.Max(area.Width - width, 1);
         Top = area.Top + _preferences.NormalizedY * Math.Max(area.Height - height, 1);
         PersistPosition();
     }
@@ -458,8 +461,8 @@ public partial class RailWindow : Window
         RingScroll.Visibility = Visibility.Collapsed;
         EmptyMark.Visibility = Visibility.Collapsed;
         var area = AreaFor(_preferences.MonitorDeviceName);
-        if (_preferences.DockedEdge == "left") Left = area.Left;
-        else Left = area.Right - CollapsedWidth;
+        // Free placement: the capsule shrinks where it stands, clamped inside.
+        Left = Math.Clamp(Left, area.Left, Math.Max(area.Right - CollapsedWidth, area.Left));
         AnimateWidth(CollapsedWidth);
     }
 
@@ -471,8 +474,8 @@ public partial class RailWindow : Window
         EmptyMark.Visibility = _rings.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RingScroll.Visibility = _rings.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var area = AreaFor(_preferences.MonitorDeviceName);
-        if (_preferences.DockedEdge == "left") Left = area.Left;
-        else Left = area.Right - RailWidth;
+        // Free placement: it re-expands where it stands, clamped inside.
+        Left = Math.Clamp(Left, area.Left, Math.Max(area.Right - RailWidth, area.Left));
         AnimateWidth(RailWidth);
     }
 
@@ -514,7 +517,13 @@ public partial class RailWindow : Window
         var pos = e.GetPosition(this);
         Left += pos.X - _dragOffset.X;
         Top += pos.Y - _dragOffset.Y;
-        SnapToEdges();
+        // Only the center must stay on a monitor while dragging: it decides
+        // which work area contains the rail, so it can cross between displays.
+        // The release settles the rail fully inside.
+        var area = AreaUnderPointer();
+        (Left, Top) = RailPlacement.KeepCenterInside(
+            Left, Top, Math.Max(ActualWidth, Width), Math.Max(ActualHeight, Height),
+            area.Left, area.Top, area.Width, area.Height);
     }
 
     private void OnMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -523,9 +532,9 @@ public partial class RailWindow : Window
         _dragging = false;
         ReleaseMouseCapture();
 
-        // The drop docks to the nearer edge — a mid-screen drop settles there
-        // instead of snapping back on the next expand — and keeps its height,
-        // clamped so the rail cannot be parked off the monitor. Do NOT
+        // The rail stays where it was dropped — anywhere on the screen —
+        // clamped fully inside the work area; the nearest edge is recorded
+        // only to steer which side the hover card opens on. Do NOT
         // ScheduleCollapse here: the mouse is still over the rail after the
         // drop. Collapse is MouseLeave's job.
         var area = AreaUnderPointer();
@@ -536,13 +545,6 @@ public partial class RailWindow : Window
         Left = left;
         Top = top;
         PersistPosition();
-    }
-
-    private void SnapToEdges()
-    {
-        var area = AreaUnderPointer();
-        Left = RailPlacement.SnapAxis(Left, Math.Max(ActualWidth, Width), area.Left, area.Width);
-        Top = RailPlacement.SnapAxis(Top, Math.Max(ActualHeight, Height), area.Top, area.Height);
     }
 
     // --- Per-monitor DPI v2 -------------------------------------------------------
@@ -564,7 +566,7 @@ public partial class RailWindow : Window
             Height = _expandedHeight > 0 ? _expandedHeight : Height;
             // The suggested origin is the previous DIP position times the new
             // scale, which walks a right-docked rail off the monitor.
-            Dispatcher.BeginInvoke(DockToPreferredEdge);
+            Dispatcher.BeginInvoke(RestorePosition);
             handled = true;
         }
         return IntPtr.Zero;
