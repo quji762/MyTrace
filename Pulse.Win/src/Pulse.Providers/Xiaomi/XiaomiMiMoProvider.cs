@@ -125,8 +125,32 @@ public sealed class XiaomiMiMoProvider : HttpUsageProviderBase
         var planTuple = XiaomiMapping.ParsePlan(detail.Body, usage.Body);
         if (planTuple is null)
         {
-            // Not a failure: an account can buy tokens by the yuan with no plan.
-            return ProviderReadResult.Failed(ProviderReadHealth.Healthy, "no coding plan");
+            // Why nothing parsed decides what the rail may say: an envelope
+            // refusal is a fault, but a complete answer from an account with
+            // no plan is not. Storing that answer clears the previous reading
+            // from memory and disk, so cache or a relaunch cannot bring back
+            // an allowance the platform has withdrawn.
+            switch (XiaomiMapping.NoPlanReason(detail.Body, usage.Body))
+            {
+                case XiaomiMapping.NoPlanKind.EnvelopeAuth:
+                    return ProviderReadResult.Failed(ProviderReadHealth.Unauthorized, "session expired");
+                case XiaomiMapping.NoPlanKind.EnvelopeRefused:
+                case XiaomiMapping.NoPlanKind.BadShape:
+                    return ProviderReadResult.Failed(ProviderReadHealth.SchemaChanged, "plan reply unreadable");
+            }
+
+            var noPlanMoney = balance.Body is { } nb ? XiaomiMapping.ParseBalance(nb) : null;
+            return ProviderReadResult.Ok(new ProviderUsage(
+                Provider: ProviderId.XiaomiMiMo,
+                AccountId: account.AccountId,
+                Windows: Array.Empty<UsageWindow>(),
+                ObservedAt: context.Now,
+                State: UsageState.Unavailable,
+                Plan: null,
+                CreditBalance: noPlanMoney is { } nm ? $"{nm.Amount:0.00} {nm.Currency}" : null,
+                CreditRemaining: null,
+                Origin: UsageRoute.WebSession)
+            { Unavailability = new Unavailability(UnavailabilityKind.NoCredits) });
         }
 
         var (planUsed, planLimit, planPeriodEnd, planCode) = planTuple.Value;
@@ -187,6 +211,59 @@ public sealed class XiaomiMiMoProvider : HttpUsageProviderBase
 /// <summary>Static mapping core, test-driven against captured replies.</summary>
 public static class XiaomiMapping
 {
+    /// <summary>Why a reply produced no plan ring: an envelope refusal is a
+    /// fault (session or schema), but a complete answer from an account with
+    /// no plan is not.</summary>
+    public enum NoPlanKind
+    {
+        NoPlan,
+        EnvelopeAuth,
+        EnvelopeRefused,
+        BadShape,
+    }
+
+    /// <summary>
+    /// Why <see cref="ParsePlan"/> returned null, walked the same way. The
+    /// platform answers over HTTP 200 whatever happened, so the envelope's own
+    /// code is classified before anything else: a `code` 500 carrying an empty
+    /// `items` once read as "no Coding Plan" — it is a refusal, not an answer.
+    /// </summary>
+    public static NoPlanKind NoPlanReason(JsonElement? detail, JsonElement? usage)
+    {
+        if (usage is { } u)
+        {
+            var code = Code(u);
+            if (code != 0)
+                return code is 401 or 403 ? NoPlanKind.EnvelopeAuth : NoPlanKind.EnvelopeRefused;
+        }
+
+        if (usage is not { } u2
+            || !u2.TryGetProperty("data", out var ud) || ud.ValueKind != JsonValueKind.Object
+            || !ud.TryGetProperty("monthUsage", out var monthUsage) || monthUsage.ValueKind != JsonValueKind.Object
+            || !monthUsage.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return NoPlanKind.BadShape;
+
+        JsonElement item = default;
+        var hasItem = false;
+        foreach (var candidate in items.EnumerateArray())
+        {
+            item = candidate;
+            hasItem = true;
+            break;
+        }
+
+        // An empty list is an account with no plan; so is a stated limit of
+        // zero, and so is an expired plan — it reports last month's numbers
+        // until renewed, which are not drawn.
+        if (!hasItem) return NoPlanKind.NoPlan;
+        var limit = item.TryGetProperty("limit", out var limitEl) && limitEl.TryGetInt32(out var limitI) ? limitI : 0;
+        if (limit <= 0) return NoPlanKind.NoPlan;
+        if (detail is { } d && Code(d) == 0 && d.TryGetProperty("data", out var dd) && dd.ValueKind == JsonValueKind.Object
+            && dd.TryGetProperty("expired", out var expired) && expired.ValueKind == JsonValueKind.True)
+            return NoPlanKind.NoPlan;
+        return NoPlanKind.NoPlan;
+    }
+
     /// <summary>An envelope first: the platform answers over HTTP 200 whatever happened.</summary>
     public static (int Used, int Limit, DateTimeOffset? PeriodEnd, string? Code)? ParsePlan(JsonElement? detail, JsonElement? usage)
     {

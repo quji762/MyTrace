@@ -63,6 +63,34 @@ public class XiaomiMiMoContractTests
     }
 
     [Fact]
+    public void No_Plan_Classification_Separates_Answers_From_Faults()
+    {
+        // An empty items list is an account with no plan: a complete answer.
+        Assert.Equal(XiaomiMapping.NoPlanKind.NoPlan,
+            XiaomiMapping.NoPlanReason(null, Load("xiaomi-no-plan.json")));
+
+        // A signed-out envelope inside HTTP 200 is a session fault, never
+        // "no plan" — a code 500 with empty items once read as one.
+        Assert.Equal(XiaomiMapping.NoPlanKind.EnvelopeAuth,
+            XiaomiMapping.NoPlanReason(null, Load("xiaomi-signed-out.json")));
+        Assert.Equal(XiaomiMapping.NoPlanKind.EnvelopeRefused,
+            XiaomiMapping.NoPlanReason(null, JsonDocument.Parse(
+                """{ "code": 500, "message": "boom" }""").RootElement.Clone()));
+
+        // A reply that is not the documented shape is a schema change.
+        Assert.Equal(XiaomiMapping.NoPlanKind.BadShape,
+            XiaomiMapping.NoPlanReason(null, JsonDocument.Parse(
+                """{ "code": 0, "data": { "unexpected": true } }""").RootElement.Clone()));
+
+        // An expired plan is not drawn, and reads as no active allowance.
+        var usage = Load("xiaomi-plan-usage.json");
+        var expired = JsonDocument.Parse(
+            """{ "code": 0, "data": { "expired": true } }""").RootElement.Clone();
+        Assert.Equal(XiaomiMapping.NoPlanKind.NoPlan,
+            XiaomiMapping.NoPlanReason(expired, usage));
+    }
+
+    [Fact]
     public void Balance_Fixture_Parses_With_Its_Own_Currency()
     {
         var balance = Load("xiaomi-balance.json");

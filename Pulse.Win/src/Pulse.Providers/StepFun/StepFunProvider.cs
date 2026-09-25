@@ -36,19 +36,20 @@ public sealed class StepFunProvider : IUsageProvider
         "(KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
     private readonly Func<string?, string?> _credentialResolver;
-    private readonly bool _useChina;
+    private readonly Func<bool> _useChina;
 
-    public StepFunProvider(Func<string?, string?>? credentialResolver = null, bool useChina = true)
+    public StepFunProvider(Func<string?, string?>? credentialResolver = null, Func<bool>? useChina = null)
     {
         _credentialResolver = credentialResolver ?? (key => key);
-        _useChina = useChina;
+        // Read per request: a site switch applies on the next refresh pass.
+        _useChina = useChina ?? (() => true); // the China site, as upstream's default
     }
 
     public ProviderId Id => ProviderId.StepFun;
     public ProviderCapabilities Capabilities => ProviderCapabilities.For(ProviderId.StepFun);
 
     /// <summary>The console's host, and the only host whose cookies are read.</summary>
-    private string Host => _useChina ? "platform.stepfun.com" : "platform.stepfun.ai";
+    private string Host => _useChina() ? "platform.stepfun.com" : "platform.stepfun.ai";
     private string Origin => "https://" + Host;
     private string MethodUrl(string method) => $"{Origin}/api/step.openapi.devcenter.Dashboard/{method}";
 

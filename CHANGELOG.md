@@ -24,6 +24,8 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Qoder 双池分离。** `totalQuota`（个人额度）和 `sharedQuota`（团队池）各自独立成环，绝不合并。
 - **崩溃与诊断日志不落凭据。** 崩溃日志的异常消息与堆栈先经脱敏器清洗再写入，并有 5 MB 滚动上限；滚动诊断日志接入同一个脱敏关卡；凭据库读写的每个密钥都会注册为脱敏字面量，任何日志路径都不会出现凭据原文。
 - **Qoder 积分包到期日与无积分状态。** 卡片在重置时间的位置显示最早到期的一批积分（同一天的合并计算），`--json` 新增 `expiresAt` 与 `expiringAmount`；账号确认没有任何积分时清掉内存与磁盘上的旧读数，不再被缓存或重启顶回。字段同时兼容国际站的驼峰与国内站的蛇形混排。
+- **双站点服务商可以切换站点。** Qoder（国际/国内）与 StepFun（默认国内站）在设置的凭据行里提供站点选择；切换立即生效于下一轮读取，并按上游规则丢弃已保存的会话——一个站点的会话绝不发往另一个站点。
+- **小米的无套餐读数与故障分离。** 200 内信封里的 401/403 按会话过期上报、其余拒绝与坏形状按结构变化上报；确认没有套餐（含已过期套餐）清掉旧读数，不再被缓存顶回。
 
 **English**
 
@@ -40,6 +42,8 @@ bullets, `**bold**`, `` `code` `` and `[links](https://example.com)`.
 - **Qoder dual-pool separation.** `totalQuota` (personal) and `sharedQuota` (team) are separate rings, never summed.
 - **Crash and diagnostic logs cannot hold credentials.** Crash exception text and stack traces pass the secret scrubber before reaching disk, with a 5 MB rolling cap; the rolling diagnostic file log goes through the same redacting choke point; every secret read from or written to the vault is registered as a scrubber literal, so no log path can ever show a raw credential.
 - **Qoder pack expiry and the no-credits state.** The card's reset slot shows the soonest packs to lapse (same-day packs summed), and `--json` gains `expiresAt` / `expiringAmount`; an account confirmed to hold no credits clears its previous reading from memory and disk instead of letting cache or a relaunch bring it back. Both the international camelCase and the mainland's mixed snake_case spellings are accepted.
+- **Dual-site providers can switch sites.** Qoder (international/China) and StepFun (China by default) offer the site choice on their settings credential row; a switch applies on the next refresh pass and discards the saved session, as upstream's rule does — a session for one host is never sent to the other.
+- **Xiaomi's no-plan reading is separated from its faults.** A 401/403 envelope inside HTTP 200 reports as an expired session, other refusals and bad shapes as a schema change; a confirmed no-plan account (expired plans included) clears its old reading instead of letting cache bring it back.
 
 ## 1.3.1
 

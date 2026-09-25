@@ -19,6 +19,7 @@
             <Style TargetType="CheckBox" BasedOn="{StaticResource PulseCheckBox}" />
             <Style TargetType="ComboBox" BasedOn="{StaticResource PulseComboBox}" />
             <Style TargetType="ListBoxItem" BasedOn="{StaticResource SidebarRow}" />
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
     </Window.Resources>
 
@@ -72,6 +73,17 @@
                                                       Checked="OnProviderToggled" Unchecked="OnProviderToggled" />
                                             <TextBox Text="{Binding Secret, UpdateSourceTrigger=PropertyChanged}"
                                                      Margin="0,8,0,0" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                                        Visibility="{Binding HasSiteChoice, Converter={StaticResource BoolToVis}}">
+                                                <RadioButton Content="International site" FontSize="12" Opacity="0.8"
+                                                             Margin="0,0,14,0" GroupName="{Binding Provider}"
+                                                             IsChecked="{Binding IsInternational, Mode=OneWay}"
+                                                             Checked="OnSiteInternational" Tag="{Binding}" />
+                                                <RadioButton Content="China site" FontSize="12" Opacity="0.8"
+                                                             GroupName="{Binding Provider}"
+                                                             IsChecked="{Binding IsChina, Mode=OneWay}"
+                                                             Checked="OnSiteChina" Tag="{Binding}" />
+                                            </StackPanel>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Save" Margin="10,0,0,0"
                                                 VerticalAlignment="Bottom" Click="OnSaveCredential" Tag="{Binding}" />

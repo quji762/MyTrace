@@ -34,6 +34,13 @@ public partial class SettingsWindow : Window
         public string Secret { get; set; } = "";
         public bool HasStoredValue { get; init; }
 
+        /// <summary>Session-cookie providers with two sign-in sites offer the
+        /// choice; changes go through the handlers, never straight into here.</summary>
+        public bool HasSiteChoice { get; init; }
+        public bool UseChina { get; init; }
+        public bool IsInternational => !UseChina;
+        public bool IsChina => UseChina;
+
         private bool _enabled;
         public bool Enabled
         {
@@ -312,6 +319,8 @@ public partial class SettingsWindow : Window
                     ProviderPresence.Found(id, home, roaming, path => File.Exists(path) || Directory.Exists(path)),
                     _store.GetSecret(id, id.ToString()) is { Length: > 0 }),
                 HasStoredValue = _store.GetSecret(id, id.ToString()) is not null,
+                HasSiteChoice = Pulse.Core.Platform.ProviderSitePreferences.HasSiteChoice(id),
+                UseChina = Pulse.Core.Platform.ProviderSitePreferences.UseChina(id),
             })
             .ToArray();
         _loading = false;
@@ -379,6 +388,24 @@ public partial class SettingsWindow : Window
 
         System.Windows.MessageBox.Show(this, $"{row.DisplayName} credential saved.", "Pulse",
             MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void OnSiteInternational(object sender, RoutedEventArgs e) => ApplySiteChoice(sender, useChina: false);
+
+    private void OnSiteChina(object sender, RoutedEventArgs e) => ApplySiteChoice(sender, useChina: true);
+
+    private void ApplySiteChoice(object sender, bool useChina)
+    {
+        if (sender is not System.Windows.Controls.RadioButton { DataContext: CredentialRow row }) return;
+        if (Pulse.Core.Platform.ProviderSitePreferences.UseChina(row.Provider) == useChina)
+            return; // the template binding checked this radio, not the user
+
+        Pulse.Core.Platform.ProviderSitePreferences.Save(row.Provider, useChina);
+        // A session for one host is never sent to the other: changing the site
+        // discards the saved session, and the next read reports the missing
+        // session until the new site's cookie is pasted (upstream rule).
+        _store.RemoveSecret(row.Provider, row.Provider.ToString());
+        Reload();
     }
 
     /// <summary>

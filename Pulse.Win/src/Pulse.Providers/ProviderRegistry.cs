@@ -93,12 +93,17 @@ public static class ProviderRegistry
             // New API: token quota + balance.
             [ProviderId.NewAPI] = new NewAPI.NewAPIProvider(key => Resolve(ProviderId.NewAPI, key)),
 
-            // Qoder: browser session cookie.
-            [ProviderId.Qoder] = new Qoder.QoderProvider(key => Resolve(ProviderId.Qoder, key)),
+            // Qoder: browser session cookie. The site is read per request so a
+            // settings change applies on the next pass.
+            [ProviderId.Qoder] = new Qoder.QoderProvider(
+                key => Resolve(ProviderId.Qoder, key),
+                useChina: () => Pulse.Core.Platform.ProviderSitePreferences.UseChina(ProviderId.Qoder)),
 
             // StepFun: console session (Step Plan). Two sites are separate
             // sign-ins; the main China site is the default, as upstream's.
-            [ProviderId.StepFun] = new StepFun.StepFunProvider(key => Resolve(ProviderId.StepFun, key)),
+            [ProviderId.StepFun] = new StepFun.StepFunProvider(
+                key => Resolve(ProviderId.StepFun, key),
+                useChina: () => Pulse.Core.Platform.ProviderSitePreferences.UseChina(ProviderId.StepFun)),
         };
     }
 }

@@ -20,19 +20,20 @@ namespace Pulse.Providers.Qoder;
 public sealed class QoderProvider : HttpUsageProviderBase
 {
     private readonly Func<string?, string?> _credentialResolver;
-    private readonly bool _useChina;
+    private readonly Func<bool> _useChina;
 
-    public QoderProvider(Func<string?, string?>? credentialResolver = null, bool useChina = false)
+    public QoderProvider(Func<string?, string?>? credentialResolver = null, Func<bool>? useChina = null)
     {
         _credentialResolver = credentialResolver ?? (key => key);
-        _useChina = useChina;
+        // Read per request: a site switch applies on the next refresh pass.
+        _useChina = useChina ?? (() => false); // international, as upstream's default
     }
 
     public override ProviderId Id => ProviderId.Qoder;
     public override ProviderCapabilities Capabilities => ProviderCapabilities.For(ProviderId.Qoder);
     protected override string Endpoint =>
-        _useChina ? "https://qoder.com.cn/api/v2/me/usages/big_model_credits"
-                  : "https://qoder.com/api/v2/me/usages/big_model_credits";
+        _useChina() ? "https://qoder.com.cn/api/v2/me/usages/big_model_credits"
+                    : "https://qoder.com/api/v2/me/usages/big_model_credits";
 
     protected override string? ResolveCredential(MonitoredAccount account, ProviderReadContext context)
     {
