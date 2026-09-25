@@ -28,6 +28,8 @@ public partial class TokenSpendWindow : Window
     private IReadOnlyDictionary<string, ModelPrice>? _priceTable;
     private TranscriptKind _kind = TranscriptKind.ClaudeCode;
     private UsageLedger _ledger = UsageLedger.EmptyLedger;
+    private IReadOnlyList<(string? Project, long Tokens)> _projectTokens =
+        Array.Empty<(string?, long)>();
     private IReadOnlyDictionary<string, ScannedTranscript> _files =
         new Dictionary<string, ScannedTranscript>();
 
@@ -194,6 +196,7 @@ public partial class TokenSpendWindow : Window
                 ? UsageLedger.EmptyLedger
                 : OpenCodeStoreReader.LedgerAt(database, _prices ?? ModelPrices.Empty);
             _files = new Dictionary<string, ScannedTranscript>();
+            _projectTokens = Array.Empty<(string?, long)>();
             SessionList.ItemsSource = Array.Empty<SessionRow>();
             RenderSummary();
             RenderChart();
@@ -280,6 +283,8 @@ public partial class TokenSpendWindow : Window
         };
         var built = AgentUsageLedger.Build(records, _prices ?? ModelPrices.Empty);
         _ledger = built.Ledger;
+        _projectTokens = built.Sessions
+            .Select(session => (session.Project, (long)session.Tokens)).ToList();
         SessionList.ItemsSource = built.Sessions
             .Select(s => new SessionRow
             {
@@ -363,6 +368,34 @@ public partial class TokenSpendWindow : Window
         var height = ChartCanvas.ActualHeight > 0 ? ChartCanvas.ActualHeight
             : (double.IsNaN(ChartCanvas.Height) || ChartCanvas.Height <= 0 ? 180 : ChartCanvas.Height);
 
+        // Horizontal gridlines with the max stamped on the top one, so bar
+        // heights have a scale instead of floating free.
+        for (var line = 0; line <= 3; line++)
+        {
+            var y = 4 + line * (height - 24 - 4) / 3.0;
+            var grid = new System.Windows.Shapes.Rectangle
+            {
+                Height = 1,
+                Fill = MutedBrush(),
+                Opacity = 0.25,
+            };
+            System.Windows.Controls.Canvas.SetLeft(grid, 0);
+            System.Windows.Controls.Canvas.SetTop(grid, y);
+            ChartCanvas.Children.Add(grid);
+            if (line == 0)
+            {
+                var maxLabel = new TextBlock
+                {
+                    Text = CompactTokens(maxTokens),
+                    FontSize = 9,
+                    Foreground = MutedBrush(),
+                };
+                System.Windows.Controls.Canvas.SetRight(maxLabel, 2);
+                System.Windows.Controls.Canvas.SetTop(maxLabel, y - 14);
+                ChartCanvas.Children.Add(maxLabel);
+            }
+        }
+
         var barAndGap = width / _ledger.Days.Count;
         var barWidth = Math.Max(2, barAndGap * 0.7);
         var labelEvery = Math.Max(1, (int)Math.Ceiling(70.0 / barAndGap));
@@ -375,13 +408,15 @@ public partial class TokenSpendWindow : Window
 
             if (barHeight > 0)
             {
+                var isLatest = index == _ledger.Days.Count - 1;
                 var bar = new System.Windows.Shapes.Rectangle
                 {
                     Width = barWidth,
                     Height = barHeight,
                     Fill = ProgressBrush(),
-                    RadiusX = 1,
-                    RadiusY = 1,
+                    Opacity = isLatest ? 1 : 0.75,
+                    RadiusX = 2,
+                    RadiusY = 2,
                 };
                 System.Windows.Controls.Canvas.SetLeft(bar, x);
                 System.Windows.Controls.Canvas.SetTop(bar, height - 18 - barHeight);
@@ -426,7 +461,106 @@ public partial class TokenSpendWindow : Window
                 ChartCanvas.Children.Add(label);
             }
         }
+
+        RenderBreakdowns();
     }
+
+    // --- Breakdowns -----------------------------------------------------------------
+
+    /// <summary>Two horizontal-bar panels beside the daily chart: which models
+    /// and which projects the tokens actually went to.</summary>
+    private void RenderBreakdowns()
+    {
+        var models = new Dictionary<string, (long Tokens, double Cost)>();
+        foreach (var day in _ledger.Days)
+        {
+            foreach (var (name, tokens) in day.Models)
+            {
+                if (string.IsNullOrEmpty(name)) continue;
+                var (t, c) = models.TryGetValue(name, out var existing) ? existing : (0L, 0.0);
+                var cost = day.ModelCosts.TryGetValue(name, out var mc) ? mc.Total : 0;
+                models[name] = (t + tokens, c + cost);
+            }
+        }
+
+        RenderBars(ModelBars, models
+            .Where(kv => kv.Value.Tokens > 0)
+            .OrderByDescending(kv => kv.Value.Tokens)
+            .Take(6)
+            .Select(kv => (Label: kv.Key, kv.Value.Tokens, Cost: (double?)kv.Value.Cost))
+            .ToList());
+
+        var projects = _projectTokens
+            .GroupBy(entry => string.IsNullOrWhiteSpace(entry.Project) ? "(no project)" : entry.Project!)
+            .Select(group => (Label: group.Key, Tokens: group.Sum(entry => entry.Tokens), Cost: (double?)null))
+            .Where(entry => entry.Tokens > 0)
+            .OrderByDescending(entry => entry.Tokens)
+            .Take(6)
+            .ToList();
+        RenderBars(ProjectBars, projects);
+    }
+
+    private void RenderBars(StackPanel panel, IReadOnlyList<(string Label, long Tokens, double? Cost)> items)
+    {
+        panel.Children.Clear();
+        if (items.Count == 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "—",
+                Foreground = MutedBrush(),
+                Margin = new Thickness(0, 4, 0, 0),
+            });
+            return;
+        }
+
+        var max = Math.Max(1, items.Max(item => item.Tokens));
+        foreach (var (label, tokens, cost) in items)
+        {
+            var share = Math.Clamp(tokens / (double)max, 0.02, 1);
+            var caption = new Grid { Margin = new Thickness(0, 3, 0, 1) };
+            caption.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            caption.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            caption.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 11,
+                Foreground = MutedBrush(),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            var value = new TextBlock
+            {
+                Text = CompactTokens(tokens) + (cost is { } amount && amount > 0 ? $" · {amount:C2}" : ""),
+                FontSize = 11,
+                Foreground = MutedBrush(),
+                Margin = new Thickness(8, 0, 0, 0),
+            };
+            Grid.SetColumn(value, 1);
+            caption.Children.Add(value);
+            panel.Children.Add(caption);
+
+            // Proportional widths through star weights: no pixel math, and the
+            // bar scales with the card.
+            var bar = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(share, GridUnitType.Star) });
+            bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - share, GridUnitType.Star) });
+            var fill = new Border
+            {
+                Height = 6,
+                CornerRadius = new CornerRadius(3),
+                Background = ProgressBrush(),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            };
+            bar.Children.Add(fill);
+            panel.Children.Add(bar);
+        }
+    }
+
+    /// <summary>Compact token counts for chart labels: 12.3M, 456k, 789.</summary>
+    internal static string CompactTokens(double tokens) =>
+        tokens >= 1_000_000 ? $"{tokens / 1_000_000:0.#}M"
+        : tokens >= 1_000 ? $"{tokens / 1_000:0.#}k"
+        : $"{tokens:0}";
 
     private void OnChartResized(object sender, SizeChangedEventArgs e) => RenderChart();
 
@@ -435,6 +569,7 @@ public partial class TokenSpendWindow : Window
     private void RenderSessions()
     {
         var rows = new List<SessionRow>();
+        var projects = new List<(string? Project, long Tokens)>();
         foreach (var (path, scanned) in _files)
         {
             int tokens = 0;
@@ -462,8 +597,10 @@ public partial class TokenSpendWindow : Window
                 EndText = end?.ToLocalTime().ToString("MMM d HH:mm") ?? "",
                 EndSort = end ?? DateTimeOffset.MinValue,
             });
+            projects.Add((project, tokens));
         }
 
+        _projectTokens = projects;
         SessionList.ItemsSource = rows.OrderByDescending(row => row.EndSort).ToList();
     }
 
