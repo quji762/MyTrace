@@ -102,6 +102,20 @@ public class SurfaceTests
     }
 
     [Fact]
+    public void Ring_Panel_Carries_A_Hit_Test_Brush_Over_The_Whole_Circle()
+    {
+        OnSta(() =>
+        {
+            // The face draws a fill-less ellipse in OnRender and a panel with
+            // a null brush hit-tests only where its children are -- without a
+            // brush the circle itself ignored the pointer and only the number
+            // underneath summoned the hover card.
+            var ring = new RingControl(ProviderId.Codex);
+            Assert.NotNull(ring.Background);
+        });
+    }
+
+    [Fact]
     public void Two_Accounts_Of_One_Provider_Get_Distinct_Rings_With_Labels()
     {
         OnSta(() =>
@@ -390,4 +404,11 @@ public class SurfaceTests
             foreach (var nested in Find<T>(child)) yield return nested;
         }
     }
+
+    [Theory]
+    [InlineData(12345678, "12.3M")]
+    [InlineData(456789, "456.8k")]
+    [InlineData(789, "789")]
+    public void Compact_Tokens_Format_For_Chart_Labels(double tokens, string expected) =>
+        Assert.Equal(expected, TokenSpendWindow.CompactTokens(tokens));
 }
